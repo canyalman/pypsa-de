@@ -4,10 +4,11 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: 20260422_small_changes
+  prefix: fixed_renewables
   name:
   # - ExPol
-  - KN2045_Mix
+  # - KN2045_Mix
+  - KN2045_Mix_FixedRenewables
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
