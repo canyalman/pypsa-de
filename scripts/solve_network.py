@@ -1031,17 +1031,69 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
 
 def add_battery_constraints(n):
     """
-    Add constraint ensuring that charger = discharger, i.e.
-    1 * charger_size - efficiency * discharger_size = 0
+    Add battery sizing constraints.
+
+    For utility-scale and home batteries, enforce a 4-hour storage duration:
+        Store-e_nom - 4 * Link-p_nom(discharger) = 0
+
+    Also ensure that charger = discharger, i.e.
+        1 * charger_size - efficiency * discharger_size = 0
     """
     if not n.links.p_nom_extendable.any():
         return
+
+    battery_duration_hours = {
+        "battery": 4.0,
+        "home battery": 4.0,
+    }
+
+    linear_expr_list = []
+    for store_carrier, duration in battery_duration_hours.items():
+        discharger_carrier = f"{store_carrier} discharger"
+
+        dischargers_ext = n.links[
+            (n.links.carrier == discharger_carrier) & n.links.p_nom_extendable
+        ].index
+        stores_ext = n.stores[
+            (n.stores.carrier == store_carrier) & n.stores.e_nom_extendable
+        ].index
+
+        if dischargers_ext.empty or stores_ext.empty:
+            logger.warning(
+                f"No valid extendable {store_carrier} stores or discharger links "
+                "found for 4-hour battery duration constraints. Not enforcing "
+                f"duration constraints for {store_carrier}."
+            )
+            continue
+
+        for discharger in dischargers_ext:
+            store = discharger.replace(" discharger", "")
+            if store not in stores_ext:
+                raise RuntimeError(
+                    f"Discharger {discharger} and store {store} do not match. "
+                    "Ensure that the battery store and discharger are in the same "
+                    "location and refer to the same technology."
+                )
+
+            store_var = n.model["Store-e_nom"].loc[store]
+            discharger_var = n.model["Link-p_nom"].loc[discharger]
+            linear_expr_list.append(store_var - duration * discharger_var)
+
+    if linear_expr_list:
+        dim = "Store-ext, Link-ext" if PYPSA_V1 else "name"
+        merged_expr = linopy.expressions.merge(
+            linear_expr_list, dim=dim, cls=type(linear_expr_list[0])
+        )
+        n.model.add_constraints(merged_expr == 0, name="Battery-storage_duration")
 
     discharger_bool = n.links.index.str.contains("battery discharger")
     charger_bool = n.links.index.str.contains("battery charger")
 
     dischargers_ext = n.links[discharger_bool].query("p_nom_extendable").index
     chargers_ext = n.links[charger_bool].query("p_nom_extendable").index
+
+    if dischargers_ext.empty or chargers_ext.empty:
+        return
 
     eff = n.links.efficiency[dischargers_ext].values
     lhs = (
