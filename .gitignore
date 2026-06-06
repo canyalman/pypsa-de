@@ -107,3 +107,4 @@ CLAUDE.local.md
 !.pixi/config.toml
 
 cluster-results/
+notebook_outputs/
