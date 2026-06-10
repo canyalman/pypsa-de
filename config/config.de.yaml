@@ -4,11 +4,16 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: fixed_renewables
+  prefix: bess_screening
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables
+  # - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_BESS_L1
+  - KN2045_Mix_BESS_L2
+  - KN2045_Mix_BESS_L3
+  - KN2045_Mix_BESS_L4
+  - KN2045_Mix_BESS_L5
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
