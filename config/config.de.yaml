@@ -292,8 +292,6 @@ costs:
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
 sector:
   v2g: false
-  bev_avail_mean: 0.6
-  bev_avail_max: 0.85
   solar_thermal: false
   district_heating:
     potential: 0.3
