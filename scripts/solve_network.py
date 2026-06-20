@@ -1033,7 +1033,7 @@ def add_battery_constraints(n):
     """
     Add battery sizing constraints.
 
-    For utility-scale and home batteries, enforce a 4-hour storage duration:
+    For utility-scale batteries, enforce a 4-hour storage duration:
         Store-e_nom - 4 * Link-p_nom(discharger) = 0
 
     Also ensure that charger = discharger, i.e.
@@ -1044,7 +1044,6 @@ def add_battery_constraints(n):
 
     battery_duration_hours = {
         "battery": 4.0,
-        "home battery": 4.0,
     }
 
     linear_expr_list = []
