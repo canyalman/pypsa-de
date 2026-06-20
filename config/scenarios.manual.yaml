@@ -163,13 +163,23 @@ KN2045_Mix_BESS_L1:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 32
               2035: 80
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 8
               2035: 20
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
       limits_capacity_max:
         Generator:
           onwind:
@@ -196,13 +206,23 @@ KN2045_Mix_BESS_L1:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 32
               2035: 80
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 8
               2035: 20
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
 
 
 KN2045_Mix_BESS_L2:
@@ -239,13 +259,23 @@ KN2045_Mix_BESS_L2:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 48
               2035: 120
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 12
               2035: 30
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
       limits_capacity_max:
         Generator:
           onwind:
@@ -272,13 +302,23 @@ KN2045_Mix_BESS_L2:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 48
               2035: 120
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 12
               2035: 30
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
 
 
 KN2045_Mix_BESS_L3:
@@ -315,13 +355,23 @@ KN2045_Mix_BESS_L3:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 60
               2035: 160
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 15
               2035: 40
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
       limits_capacity_max:
         Generator:
           onwind:
@@ -348,13 +398,23 @@ KN2045_Mix_BESS_L3:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 60
               2035: 160
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 15
               2035: 40
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
 
 
 KN2045_Mix_BESS_L4:
@@ -391,13 +451,23 @@ KN2045_Mix_BESS_L4:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 88
               2035: 220
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 22
               2035: 55
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
       limits_capacity_max:
         Generator:
           onwind:
@@ -424,13 +494,23 @@ KN2045_Mix_BESS_L4:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 88
               2035: 220
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 22
               2035: 55
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
 
 
 KN2045_Mix_BESS_L5:
@@ -467,13 +547,23 @@ KN2045_Mix_BESS_L5:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 120
               2035: 280
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 30
               2035: 70
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
       limits_capacity_max:
         Generator:
           onwind:
@@ -500,13 +590,23 @@ KN2045_Mix_BESS_L5:
         Store:
           battery:
             DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
               2030: 120
               2035: 280
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           battery discharger:
             DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
               2030: 30
               2035: 70
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
 
 
 KN2045_Mix_LowDecentralDiscount:
