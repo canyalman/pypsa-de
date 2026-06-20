@@ -103,6 +103,22 @@ KN2045_Mix_FixedRenewables:
               2035: 309
               2040: 400 # PV strategy
               2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
       limits_capacity_max:
         Generator:
           onwind:
@@ -127,6 +143,22 @@ KN2045_Mix_FixedRenewables:
               2035: 309
               2040: 400 # PV strategy
               2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
+          home battery:
+            DE:
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
+          home battery discharger:
+            DE:
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
 
 
 KN2045_Mix_LowDecentralDiscount:
