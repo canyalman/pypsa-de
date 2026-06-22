@@ -106,11 +106,13 @@ KN2045_Mix_FixedRenewables:
         Store:
           home battery:
             DE:
+              2025: 0 # no system-available residential battery flexibility
               2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
               2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           home battery discharger:
             DE:
+              2025: 0 # no system-available residential battery flexibility
               2030: 2.688 # ERAA residential storage
               2035: 11.477 # ERAA residential storage
       limits_capacity_max:
@@ -140,11 +142,13 @@ KN2045_Mix_FixedRenewables:
         Store:
           home battery:
             DE:
+              2025: 0 # no system-available residential battery flexibility
               2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
               2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
         Link:
           home battery discharger:
             DE:
+              2025: 0 # no system-available residential battery flexibility
               2030: 2.688 # ERAA residential storage
               2035: 11.477 # ERAA residential storage
 
