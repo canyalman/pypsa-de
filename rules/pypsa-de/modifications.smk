@@ -3,6 +3,25 @@
 # SPDX-License-Identifier: CC BY 4.0
 
 
+fixed_neighbor_capacities = config.get("solving", {}).get("constraints", {}).get(
+    "fixed_neighbor_capacities", {}
+)
+
+if fixed_neighbor_capacities.get("enable", False):
+    rule build_fixed_neighbor_capacity_manifest:
+        input:
+            network_2030=fixed_neighbor_capacities["reference_networks"][2030],
+            network_2035=fixed_neighbor_capacities["reference_networks"][2035],
+        output:
+            manifest=fixed_neighbor_capacities["capacity_manifest"],
+        params:
+            domestic_country=fixed_neighbor_capacities["domestic_country"],
+        message:
+            "Extracting fixed-neighbor capacities from solved reference networks"
+        script:
+            scripts("pypsa-de/extract_fixed_neighbor_capacities.py")
+
+
 rule build_scenarios:
     input:
         ariadne_database="data/ariadne_database.csv",
