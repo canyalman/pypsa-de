@@ -129,12 +129,111 @@ KN2045_Mix_FixedRenewables:
               2045: 400
 
 
+KN2045_Mix_BESS_L0:
+  pypsa-de:
+    reference_scenario: KN2045_Mix
+  solving:
+    constraints:
+      # Screening scenario: existing German utility-scale BESS only; no new build.
+      # Internal German siting remains optimizable within the fixed national totals.
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1 # existing installed capacity reference
+              2030: 115 # Wind-an-Land Law
+              2035: 157 # Wind-an-Land Law
+              2040: 160 # Wind-an-Land Law
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5 # existing installed capacity reference
+              2030: 30 # Wind-auf-See Law
+              2035: 40 # Wind-auf-See Law
+              2040: 50
+              2045: 70 # Wind-auf-See Law
+          solar:
+            DE:
+              2025: 117 # existing installed capacity reference
+              2030: 215 # PV strategy
+              2035: 309
+              2040: 400 # PV strategy
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
+              2030: 4.058 # existing-only counterfactual
+              2035: 4.058 # existing-only counterfactual
+          home battery:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
+              2030: 2.705 # existing-only counterfactual
+              2035: 2.705 # existing-only counterfactual
+          home battery discharger:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1 # existing installed capacity reference
+              2030: 115 # Wind-an-Land Law
+              2035: 157 # Wind-an-Land Law
+              2040: 160 # Wind-an-Land Law
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5 # existing installed capacity reference
+              2030: 30 # Wind-auf-See Law
+              2035: 40 # Wind-auf-See Law
+              2040: 50
+              2045: 70 # Wind-auf-See Law
+          solar:
+            DE:
+              2025: 117 # existing installed capacity reference
+              2030: 215 # PV strategy
+              2035: 309
+              2040: 400 # PV strategy
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
+              2030: 4.058 # existing-only counterfactual
+              2035: 4.058 # existing-only counterfactual
+          home battery:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
+              2030: 2.705 # existing-only counterfactual
+              2035: 2.705 # existing-only counterfactual
+          home battery discharger:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
+
+
 KN2045_Mix_BESS_L1:
   pypsa-de:
     reference_scenario: KN2045_Mix
   solving:
     constraints:
-      # Screening scenario: very low German utility-scale BESS pathway.
+      # Screening scenario: severe underbuild German utility-scale BESS pathway.
       # Battery duration is fixed through national power and energy totals: 4h.
       # Internal German siting remains optimizable.
       limits_capacity_min:
@@ -164,7 +263,107 @@ KN2045_Mix_BESS_L1:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 32
+              2030: 24
+              2035: 40
+          home battery:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
+              2030: 6
+              2035: 10
+          home battery discharger:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1 # existing installed capacity reference
+              2030: 115 # Wind-an-Land Law
+              2035: 157 # Wind-an-Land Law
+              2040: 160 # Wind-an-Land Law
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5 # existing installed capacity reference
+              2030: 30 # Wind-auf-See Law
+              2035: 40 # Wind-auf-See Law
+              2040: 50
+              2045: 70 # Wind-auf-See Law
+          solar:
+            DE:
+              2025: 117 # existing installed capacity reference
+              2030: 215 # PV strategy
+              2035: 309
+              2040: 400 # PV strategy
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
+              2030: 24
+              2035: 40
+          home battery:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705 # Battery Charts 2025 year-end large-scale storage
+              2030: 6
+              2035: 10
+          home battery discharger:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
+
+
+KN2045_Mix_BESS_L2:
+  pypsa-de:
+    reference_scenario: KN2045_Mix
+  solving:
+    constraints:
+      # Screening scenario: low German utility-scale BESS pathway.
+      # Battery duration is fixed through national power and energy totals: 4h.
+      # Internal German siting remains optimizable.
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1 # existing installed capacity reference
+              2030: 115 # Wind-an-Land Law
+              2035: 157 # Wind-an-Land Law
+              2040: 160 # Wind-an-Land Law
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5 # existing installed capacity reference
+              2030: 30 # Wind-auf-See Law
+              2035: 40 # Wind-auf-See Law
+              2040: 50
+              2045: 70 # Wind-auf-See Law
+          solar:
+            DE:
+              2025: 117 # existing installed capacity reference
+              2030: 215 # PV strategy
+              2035: 309
+              2040: 400 # PV strategy
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058 # Battery Charts 2025 year-end large-scale storage
+              2030: 48
               2035: 80
           home battery:
             DE:
@@ -175,7 +374,7 @@ KN2045_Mix_BESS_L1:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 8
+              2030: 12
               2035: 20
           home battery discharger:
             DE:
@@ -209,7 +408,7 @@ KN2045_Mix_BESS_L1:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 32
+              2030: 48
               2035: 80
           home battery:
             DE:
@@ -220,7 +419,7 @@ KN2045_Mix_BESS_L1:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 8
+              2030: 12
               2035: 20
           home battery discharger:
             DE:
@@ -229,7 +428,7 @@ KN2045_Mix_BESS_L1:
               2035: 11.477 # ERAA residential storage
 
 
-KN2045_Mix_BESS_L2:
+KN2045_Mix_BESS_L3:
   pypsa-de:
     reference_scenario: KN2045_Mix
   solving:
@@ -264,7 +463,7 @@ KN2045_Mix_BESS_L2:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 48
+              2030: 72
               2035: 120
           home battery:
             DE:
@@ -275,7 +474,7 @@ KN2045_Mix_BESS_L2:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 12
+              2030: 18
               2035: 30
           home battery discharger:
             DE:
@@ -309,7 +508,7 @@ KN2045_Mix_BESS_L2:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 48
+              2030: 72
               2035: 120
           home battery:
             DE:
@@ -320,7 +519,7 @@ KN2045_Mix_BESS_L2:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 12
+              2030: 18
               2035: 30
           home battery discharger:
             DE:
@@ -329,7 +528,7 @@ KN2045_Mix_BESS_L2:
               2035: 11.477 # ERAA residential storage
 
 
-KN2045_Mix_BESS_L3:
+KN2045_Mix_BESS_L4:
   pypsa-de:
     reference_scenario: KN2045_Mix
   solving:
@@ -364,7 +563,7 @@ KN2045_Mix_BESS_L3:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 60
+              2030: 96
               2035: 160
           home battery:
             DE:
@@ -375,7 +574,7 @@ KN2045_Mix_BESS_L3:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 15
+              2030: 24
               2035: 40
           home battery discharger:
             DE:
@@ -409,7 +608,7 @@ KN2045_Mix_BESS_L3:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 60
+              2030: 96
               2035: 160
           home battery:
             DE:
@@ -420,7 +619,7 @@ KN2045_Mix_BESS_L3:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 15
+              2030: 24
               2035: 40
           home battery discharger:
             DE:
@@ -429,12 +628,12 @@ KN2045_Mix_BESS_L3:
               2035: 11.477 # ERAA residential storage
 
 
-KN2045_Mix_BESS_L4:
+KN2045_Mix_BESS_L5:
   pypsa-de:
     reference_scenario: KN2045_Mix
   solving:
     constraints:
-      # Screening scenario: mid-high German utility-scale BESS pathway.
+      # Screening scenario: high-mid German utility-scale BESS pathway.
       # Battery duration is fixed through national power and energy totals: 4h.
       # Internal German siting remains optimizable.
       limits_capacity_min:
@@ -464,7 +663,7 @@ KN2045_Mix_BESS_L4:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 88
+              2030: 132
               2035: 220
           home battery:
             DE:
@@ -475,7 +674,7 @@ KN2045_Mix_BESS_L4:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 22
+              2030: 33
               2035: 55
           home battery discharger:
             DE:
@@ -509,7 +708,7 @@ KN2045_Mix_BESS_L4:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 88
+              2030: 132
               2035: 220
           home battery:
             DE:
@@ -520,7 +719,7 @@ KN2045_Mix_BESS_L4:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 22
+              2030: 33
               2035: 55
           home battery discharger:
             DE:
@@ -529,7 +728,7 @@ KN2045_Mix_BESS_L4:
               2035: 11.477 # ERAA residential storage
 
 
-KN2045_Mix_BESS_L5:
+KN2045_Mix_BESS_L6:
   pypsa-de:
     reference_scenario: KN2045_Mix
   solving:
@@ -564,7 +763,7 @@ KN2045_Mix_BESS_L5:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 120
+              2030: 168
               2035: 280
           home battery:
             DE:
@@ -575,7 +774,7 @@ KN2045_Mix_BESS_L5:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 30
+              2030: 42
               2035: 70
           home battery discharger:
             DE:
@@ -609,7 +808,7 @@ KN2045_Mix_BESS_L5:
           battery:
             DE:
               2025: 4.058 # Battery Charts 2025 year-end large-scale storage
-              2030: 120
+              2030: 168
               2035: 280
           home battery:
             DE:
@@ -620,7 +819,7 @@ KN2045_Mix_BESS_L5:
           battery discharger:
             DE:
               2025: 2.705 # Battery Charts 2025 year-end large-scale storage
-              2030: 30
+              2030: 42
               2035: 70
           home battery discharger:
             DE:
