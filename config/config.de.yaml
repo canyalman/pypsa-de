@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: l4_reference_baseline
+  prefix: l4_fixed_neighbor_validation
   name:
   # - ExPol
   # - KN2045_Mix
@@ -457,6 +457,17 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
+    # Freeze all capacity variables outside Germany to the L4 reference solution.
+    # The 2025 reference network is also reused as the common myopic base year.
+    fixed_neighbor_capacities:
+      enable: true
+      domestic_country: DE
+      strict_asset_match: true
+      capacity_manifest: resources/fixed_neighbor_l4_capacities.csv
+      reference_networks:
+        2025: cluster-results/l4_reference_baseline/KN2045_Mix_BESS_L4/networks/base_s_27__none_2025.nc
+        2030: cluster-results/l4_reference_baseline/KN2045_Mix_BESS_L4/networks/base_s_27__none_2030.nc
+        2035: cluster-results/l4_reference_baseline/KN2045_Mix_BESS_L4/networks/base_s_27__none_2035.nc
     limits_capacity_max:
       Generator:
         onwind:

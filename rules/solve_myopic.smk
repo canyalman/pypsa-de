@@ -3,6 +3,15 @@
 # SPDX-License-Identifier: MIT
 
 
+def fixed_neighbor_capacity_manifest(wildcards):
+    settings = config_provider(
+        "solving", "constraints", "fixed_neighbor_capacities", default={}
+    )(wildcards)
+    if not settings.get("enable", False):
+        return []
+    return settings["capacity_manifest"]
+
+
 rule add_existing_baseyear:
     input:
         network=lambda w: (
@@ -135,6 +144,7 @@ rule solve_sector_network_myopic:
         ),
         co2_totals_name=resources("co2_totals.csv"),
         energy_totals=resources("energy_totals.csv"),
+        fixed_neighbor_capacities=fixed_neighbor_capacity_manifest,
     output:
         network=RESULTS
         + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
@@ -176,3 +186,29 @@ rule solve_sector_network_myopic:
         "Solving sector-coupled network with myopic foresight for {wildcards.clusters} clusters, {wildcards.planning_horizons} planning horizons, {wildcards.opts} electric options and {wildcards.sector_opts} sector options"
     script:
         scripts("solve_network.py")
+
+
+fixed_neighbor_capacities = config.get("solving", {}).get("constraints", {}).get(
+    "fixed_neighbor_capacities", {}
+)
+
+if fixed_neighbor_capacities.get("enable", False):
+    baseyear = config["scenario"]["planning_horizons"][0]
+
+    rule reuse_fixed_neighbor_baseyear:
+        input:
+            reference_network=fixed_neighbor_capacities["reference_networks"][
+                baseyear
+            ],
+        output:
+            network=RESULTS
+            + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+        wildcard_constraints:
+            planning_horizons=str(baseyear),
+        message:
+            "Reusing the fixed-neighbor L4 base-year network for {wildcards.run}"
+        script:
+            scripts("pypsa-de/reuse_fixed_neighbor_baseyear.py")
+
+
+    ruleorder: reuse_fixed_neighbor_baseyear > solve_sector_network_myopic
