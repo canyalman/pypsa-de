@@ -4,18 +4,12 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_neighbors_l4
+  prefix: l4_reference_electrolysis_fixed
   name:
   # - ExPol
   # - KN2045_Mix
   # - KN2045_Mix_FixedRenewables
-  - KN2045_Mix_BESS_L0
-  - KN2045_Mix_BESS_L1
-  - KN2045_Mix_BESS_L2
-  - KN2045_Mix_BESS_L3
   - KN2045_Mix_BESS_L4
-  - KN2045_Mix_BESS_L5
-  - KN2045_Mix_BESS_L6
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -466,7 +460,7 @@ solving:
     # Freeze all capacity variables outside Germany to the L4 reference solution.
     # The 2025 reference network is also reused as the common myopic base year.
     fixed_neighbor_capacities:
-      enable: true
+      enable: false
       domestic_country: DE
       strict_asset_match: true
       capacity_manifest: resources/fixed_neighbor_l4_capacities.csv
@@ -508,6 +502,10 @@ solving:
           DE:
             2025: 120 # GWh, https://www.hamburg-institut.com/wp-content/uploads/2023/12/Referenzblatt_SysGF-1.pdf
       Link:
+        H2 Electrolysis:
+          DE:
+            2030: 8 # policy-anchored electrolysis sensitivity
+            2035: 15 # policy-anchored electrolysis sensitivity
         methanolisation:
           DE:
             2030: 5.7
@@ -550,10 +548,11 @@ solving:
           DE:
             2025: 118 # Abb. 4_9 https://www.agora-energiewende.de/fileadmin/Projekte/2025/2025-28_DE_JAW25/A-EW_391_Die_Energiewende_in_Deutschland_Stand_der_Dinge_2025_WEB.pdf
             2030: 200
-        Link:
-          H2 Electrolysis:
-            DE:
-              2030: 3
+      Link:
+        H2 Electrolysis:
+          DE:
+            2030: 8 # policy-anchored electrolysis sensitivity
+            2035: 15 # policy-anchored electrolysis sensitivity
   # For reference, this are the values specified in the laws
   # limits_capacity_min:
   #     Generator:
