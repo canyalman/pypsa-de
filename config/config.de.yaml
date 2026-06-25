@@ -4,12 +4,18 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: l4_fixed_neighbor_validation
+  prefix: bess_fixed_neighbors_l4
   name:
   # - ExPol
   # - KN2045_Mix
   # - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_BESS_L0
+  - KN2045_Mix_BESS_L1
+  - KN2045_Mix_BESS_L2
+  - KN2045_Mix_BESS_L3
   - KN2045_Mix_BESS_L4
+  - KN2045_Mix_BESS_L5
+  - KN2045_Mix_BESS_L6
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
