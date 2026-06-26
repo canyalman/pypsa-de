@@ -4,12 +4,18 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: l4_reference_electrolysis_fixed
+  prefix: bess_fixed_neighbors_l4_electrolysis_fixed
   name:
   # - ExPol
   # - KN2045_Mix
   # - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_BESS_L0
+  - KN2045_Mix_BESS_L1
+  - KN2045_Mix_BESS_L2
+  - KN2045_Mix_BESS_L3
   - KN2045_Mix_BESS_L4
+  - KN2045_Mix_BESS_L5
+  - KN2045_Mix_BESS_L6
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -460,14 +466,14 @@ solving:
     # Freeze all capacity variables outside Germany to the L4 reference solution.
     # The 2025 reference network is also reused as the common myopic base year.
     fixed_neighbor_capacities:
-      enable: false
+      enable: true
       domestic_country: DE
       strict_asset_match: true
-      capacity_manifest: resources/fixed_neighbor_l4_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_l4_electrolysis_fixed_capacities.csv
       reference_networks:
-        2025: cluster-results/l4_reference_baseline/KN2045_Mix_BESS_L4/networks/base_s_27__none_2025.nc
-        2030: cluster-results/l4_reference_baseline/KN2045_Mix_BESS_L4/networks/base_s_27__none_2030.nc
-        2035: cluster-results/l4_reference_baseline/KN2045_Mix_BESS_L4/networks/base_s_27__none_2035.nc
+        2025: cluster-results/l4_reference_electrolysis_fixed/KN2045_Mix_BESS_L4/networks/base_s_27__none_2025.nc
+        2030: cluster-results/l4_reference_electrolysis_fixed/KN2045_Mix_BESS_L4/networks/base_s_27__none_2030.nc
+        2035: cluster-results/l4_reference_electrolysis_fixed/KN2045_Mix_BESS_L4/networks/base_s_27__none_2035.nc
     limits_capacity_max:
       Generator:
         onwind:
