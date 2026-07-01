@@ -4,11 +4,12 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: base_run_4h
+  prefix: base_run_4h_bev_dsm
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BEVDSMOff
+  - KN2045_Mix_FixedRenewables_BEVDSM03
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
