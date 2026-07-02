@@ -234,6 +234,87 @@ KN2045_Mix_FixedRenewables_BEVDSM03:
               2035: 11.477 # ERAA residential storage
 
 
+KN2045_Mix_FixedRenewables_BEVDSM02:
+  sector:
+    bev_dsm_availability: 0.2
+  solving:
+    constraints:
+      # Fixed German renewable capacities from law/reference targets.
+      # Set min and max equal so these capacities are built exactly.
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1 # existing installed capacity reference
+              2030: 115 # Wind-an-Land Law
+              2035: 157 # Wind-an-Land Law
+              2040: 160 # Wind-an-Land Law
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5 # existing installed capacity reference
+              2030: 30 # Wind-auf-See Law
+              2035: 40 # Wind-auf-See Law
+              # assuming at least 1/3 of difference reached in 2040
+              2040: 50
+              2045: 70 # Wind-auf-See Law
+          solar:
+            DE:
+              2025: 117 # existing installed capacity reference
+              2030: 215 # PV strategy
+              2035: 309
+              2040: 400 # PV strategy
+              2045: 400
+        Store:
+          home battery:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          home battery discharger:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1 # existing installed capacity reference
+              2030: 115 # Wind-an-Land Law
+              2035: 157 # Wind-an-Land Law
+              2040: 160 # Wind-an-Land Law
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5 # existing installed capacity reference
+              2030: 30 # Wind-auf-See Law
+              2035: 40 # Wind-auf-See Law
+              # assuming at least 1/3 of difference reached in 2040
+              2040: 50
+              2045: 70 # Wind-auf-See Law
+          solar:
+            DE:
+              2025: 117 # existing installed capacity reference
+              2030: 215 # PV strategy
+              2035: 309
+              2040: 400 # PV strategy
+              2045: 400
+        Store:
+          home battery:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 5.43 # ERAA residential storage, 2.688 GW at ~2h
+              2035: 24.29 # ERAA residential storage, 11.477 GW at ~2.1h
+        Link:
+          home battery discharger:
+            DE:
+              2025: 0 # no system-available residential battery flexibility
+              2030: 2.688 # ERAA residential storage
+              2035: 11.477 # ERAA residential storage
+
+
 KN2045_Mix_LowDecentralDiscount:
   costs:
     custom_cost_fn: data/pypsa-de/custom_costs_nep_2023_low_decentral_discount.csv
