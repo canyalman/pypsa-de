@@ -4,11 +4,16 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: base_run_4h_bev_dsm_02
+  prefix: bess_screening_bev_dsm_03_05
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BEVDSM02
+  - KN2045_Mix_FixedRenewables_BESS_DSM05_M10
+  - KN2045_Mix_FixedRenewables_BESS_DSM05_P10
+  - KN2045_Mix_FixedRenewables_BESS_DSM05_P20
+  - KN2045_Mix_FixedRenewables_BESS_DSM03_M10
+  - KN2045_Mix_FixedRenewables_BESS_DSM03_P10
+  - KN2045_Mix_FixedRenewables_BESS_DSM03_P20
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
