@@ -1029,11 +1029,12 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
     n.model.add_constraints(lhs == 0, name="TES_charger_ratio")
 
 
-def add_battery_constraints(n):
+def add_battery_constraints(n, planning_horizons=None):
     """
     Add battery sizing constraints.
 
-    For utility-scale batteries, enforce a 4-hour storage duration:
+    For utility-scale batteries, enforce a 4-hour storage duration unless the
+    active scenario explicitly excludes the country and planning year:
         Store-e_nom - 4 * Link-p_nom(discharger) = 0
 
     Also ensure that charger = discharger, i.e.
@@ -1045,6 +1046,25 @@ def add_battery_constraints(n):
     battery_duration_hours = {
         "battery": 4.0,
     }
+    duration_config = n.config.get("battery_storage_duration", {})
+    excluded_country_years = {
+        country: {int(year) for year in years}
+        for country, years in duration_config.get("exclude", {}).items()
+    }
+    investment_year = (
+        int(planning_horizons) if planning_horizons is not None else None
+    )
+    excluded_countries = {
+        country
+        for country, years in excluded_country_years.items()
+        if investment_year in years
+    }
+    if excluded_countries:
+        logger.info(
+            "Skipping utility-battery duration constraints in %s for %s.",
+            ", ".join(sorted(excluded_countries)),
+            investment_year,
+        )
 
     linear_expr_list = []
     for store_carrier, duration in battery_duration_hours.items():
@@ -1066,6 +1086,10 @@ def add_battery_constraints(n):
             continue
 
         for discharger in dischargers_ext:
+            country = discharger[:2]
+            if country in excluded_countries:
+                continue
+
             store = discharger.replace(" discharger", "")
             if store not in stores_ext:
                 raise RuntimeError(
@@ -1326,7 +1350,7 @@ def extra_functionality(
             add_TES_energy_to_power_ratio_constraints(n)
             add_TES_charger_ratio_constraints(n)
 
-    add_battery_constraints(n)
+    add_battery_constraints(n, planning_horizons)
     add_lossy_bidirectional_link_constraints(n)
     add_pipe_retrofit_constraint(n)
     if n._multi_invest:

@@ -317,7 +317,10 @@ KN2045_Mix_FixedRenewables_BEVDSM02:
 
 KN2045_Mix_FixedRenewables_BESS_DSM05_M10:
   # Utility-scale BESS remains endogenous through 2030 and is fixed only in 2035.
-  # The solve_network.py sizing constraint enforces 4h at every battery location.
+  # The sizing constraint enforces 4h through 2030; 2035 totals are fixed below.
+  battery_storage_duration:
+    exclude:
+      DE: [2035] # national power and energy totals are already fixed to 4h
   sector:
     bev_dsm_availability: 0.5
   solving:
@@ -407,7 +410,10 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_M10:
 
 KN2045_Mix_FixedRenewables_BESS_DSM05_P10:
   # Utility-scale BESS remains endogenous through 2030 and is fixed only in 2035.
-  # The solve_network.py sizing constraint enforces 4h at every battery location.
+  # The sizing constraint enforces 4h through 2030; 2035 totals are fixed below.
+  battery_storage_duration:
+    exclude:
+      DE: [2035] # national power and energy totals are already fixed to 4h
   sector:
     bev_dsm_availability: 0.5
   solving:
@@ -497,7 +503,10 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_P10:
 
 KN2045_Mix_FixedRenewables_BESS_DSM05_P20:
   # Utility-scale BESS remains endogenous through 2030 and is fixed only in 2035.
-  # The solve_network.py sizing constraint enforces 4h at every battery location.
+  # The sizing constraint enforces 4h through 2030; 2035 totals are fixed below.
+  battery_storage_duration:
+    exclude:
+      DE: [2035] # national power and energy totals are already fixed to 4h
   sector:
     bev_dsm_availability: 0.5
   solving:
@@ -587,7 +596,10 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_P20:
 
 KN2045_Mix_FixedRenewables_BESS_DSM03_M10:
   # Utility-scale BESS remains endogenous through 2030 and is fixed only in 2035.
-  # The solve_network.py sizing constraint enforces 4h at every battery location.
+  # The sizing constraint enforces 4h through 2030; 2035 totals are fixed below.
+  battery_storage_duration:
+    exclude:
+      DE: [2035] # national power and energy totals are already fixed to 4h
   sector:
     bev_dsm_availability: 0.3
   solving:
@@ -677,7 +689,10 @@ KN2045_Mix_FixedRenewables_BESS_DSM03_M10:
 
 KN2045_Mix_FixedRenewables_BESS_DSM03_P10:
   # Utility-scale BESS remains endogenous through 2030 and is fixed only in 2035.
-  # The solve_network.py sizing constraint enforces 4h at every battery location.
+  # The sizing constraint enforces 4h through 2030; 2035 totals are fixed below.
+  battery_storage_duration:
+    exclude:
+      DE: [2035] # national power and energy totals are already fixed to 4h
   sector:
     bev_dsm_availability: 0.3
   solving:
@@ -767,7 +782,10 @@ KN2045_Mix_FixedRenewables_BESS_DSM03_P10:
 
 KN2045_Mix_FixedRenewables_BESS_DSM03_P20:
   # Utility-scale BESS remains endogenous through 2030 and is fixed only in 2035.
-  # The solve_network.py sizing constraint enforces 4h at every battery location.
+  # The sizing constraint enforces 4h through 2030; 2035 totals are fixed below.
+  battery_storage_duration:
+    exclude:
+      DE: [2035] # national power and energy totals are already fixed to 4h
   sector:
     bev_dsm_availability: 0.3
   solving:

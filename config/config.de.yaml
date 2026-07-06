@@ -8,9 +8,9 @@ run:
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BESS_DSM05_M10
-  - KN2045_Mix_FixedRenewables_BESS_DSM05_P10
-  - KN2045_Mix_FixedRenewables_BESS_DSM05_P20
+  # - KN2045_Mix_FixedRenewables_BESS_DSM05_M10
+  # - KN2045_Mix_FixedRenewables_BESS_DSM05_P10
+  # - KN2045_Mix_FixedRenewables_BESS_DSM05_P20
   - KN2045_Mix_FixedRenewables_BESS_DSM03_M10
   - KN2045_Mix_FixedRenewables_BESS_DSM03_P10
   - KN2045_Mix_FixedRenewables_BESS_DSM03_P20
