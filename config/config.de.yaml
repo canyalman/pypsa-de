@@ -4,16 +4,16 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_screening_dsm05_fixed_neighbors
+  prefix: bess_screening_dsm03_fixed_neighbors
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BESS_DSM05_M10
-  - KN2045_Mix_FixedRenewables_BESS_DSM05_P10
-  - KN2045_Mix_FixedRenewables_BESS_DSM05_P20
-  # - KN2045_Mix_FixedRenewables_BESS_DSM03_M10
-  # - KN2045_Mix_FixedRenewables_BESS_DSM03_P10
-  # - KN2045_Mix_FixedRenewables_BESS_DSM03_P20
+  # - KN2045_Mix_FixedRenewables_BESS_DSM05_M10
+  # - KN2045_Mix_FixedRenewables_BESS_DSM05_P10
+  # - KN2045_Mix_FixedRenewables_BESS_DSM05_P20
+  - KN2045_Mix_FixedRenewables_BESS_DSM03_M10
+  - KN2045_Mix_FixedRenewables_BESS_DSM03_P10
+  - KN2045_Mix_FixedRenewables_BESS_DSM03_P20
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -462,17 +462,17 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
-    # Freeze all capacity variables outside Germany to the optimized DSM 0.5 reference.
+    # Freeze all capacity variables outside Germany to the optimized DSM 0.3 reference.
     # The 2025 reference network is also reused as the common myopic base year.
     fixed_neighbor_capacities:
       enable: true
       domestic_country: DE
       strict_asset_match: true
-      capacity_manifest: resources/fixed_neighbor_dsm05_opt_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_dsm03_opt_capacities.csv
       reference_networks:
-        2025: cluster-results/base_run_4h/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/base_run_4h/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/base_run_4h/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+        2025: cluster-results/base_run_4h_bev_dsm/KN2045_Mix_FixedRenewables_BEVDSM03/networks/base_s_27__none_2025.nc
+        2030: cluster-results/base_run_4h_bev_dsm/KN2045_Mix_FixedRenewables_BEVDSM03/networks/base_s_27__none_2030.nc
+        2035: cluster-results/base_run_4h_bev_dsm/KN2045_Mix_FixedRenewables_BEVDSM03/networks/base_s_27__none_2035.nc
     limits_capacity_max:
       Generator:
         onwind:
