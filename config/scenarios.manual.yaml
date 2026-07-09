@@ -610,7 +610,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
       GB: [2035]
       LU: [2035]
       NL: [2035]
-      NO: [2035]
+      'NO': [2035]
       PL: [2035]
       SE: [2035]
       ES: [2035]
@@ -664,7 +664,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0.003
             NL:
               2035: 4.581
-            NO:
+            'NO':
               2035: 3.28
             PL:
               2035: 7.787
@@ -695,7 +695,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0.001
             NL:
               2035: 0.006
-            NO:
+            'NO':
               2035: 0.001
             PL:
               2035: 2.723
@@ -727,7 +727,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0
             NL:
               2035: 0.868
-            NO:
+            'NO':
               2035: 0.433
             PL:
               2035: 1.417
@@ -758,7 +758,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0
             NL:
               2035: 0.002
-            NO:
+            'NO':
               2035: 0
             PL:
               2035: 0.743
@@ -813,7 +813,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0.003
             NL:
               2035: 4.581
-            NO:
+            'NO':
               2035: 3.28
             PL:
               2035: 7.787
@@ -844,7 +844,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0.001
             NL:
               2035: 0.006
-            NO:
+            'NO':
               2035: 0.001
             PL:
               2035: 2.723
@@ -876,7 +876,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0
             NL:
               2035: 0.868
-            NO:
+            'NO':
               2035: 0.433
             PL:
               2035: 1.417
@@ -907,7 +907,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_M10:
               2035: 0
             NL:
               2035: 0.002
-            NO:
+            'NO':
               2035: 0
             PL:
               2035: 0.743
@@ -933,7 +933,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
       GB: [2035]
       LU: [2035]
       NL: [2035]
-      NO: [2035]
+      'NO': [2035]
       PL: [2035]
       SE: [2035]
       ES: [2035]
@@ -987,7 +987,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.006
             NL:
               2035: 9.736
-            NO:
+            'NO':
               2035: 6.971
             PL:
               2035: 16.551
@@ -1018,7 +1018,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.003
             NL:
               2035: 0.013
-            NO:
+            'NO':
               2035: 0.001
             PL:
               2035: 5.788
@@ -1050,7 +1050,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.001
             NL:
               2035: 1.618
-            NO:
+            'NO':
               2035: 0.807
             PL:
               2035: 2.639
@@ -1081,7 +1081,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.001
             NL:
               2035: 0.003
-            NO:
+            'NO':
               2035: 0
             PL:
               2035: 1.385
@@ -1136,7 +1136,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.006
             NL:
               2035: 9.736
-            NO:
+            'NO':
               2035: 6.971
             PL:
               2035: 16.551
@@ -1167,7 +1167,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.003
             NL:
               2035: 0.013
-            NO:
+            'NO':
               2035: 0.001
             PL:
               2035: 5.788
@@ -1199,7 +1199,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.001
             NL:
               2035: 1.618
-            NO:
+            'NO':
               2035: 0.807
             PL:
               2035: 2.639
@@ -1230,7 +1230,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P10:
               2035: 0.001
             NL:
               2035: 0.003
-            NO:
+            'NO':
               2035: 0
             PL:
               2035: 1.385
@@ -1256,7 +1256,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
       GB: [2035]
       LU: [2035]
       NL: [2035]
-      NO: [2035]
+      'NO': [2035]
       PL: [2035]
       SE: [2035]
       ES: [2035]
@@ -1310,7 +1310,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.008
             NL:
               2035: 12.313
-            NO:
+            'NO':
               2035: 8.817
             PL:
               2035: 20.932
@@ -1341,7 +1341,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.004
             NL:
               2035: 0.016
-            NO:
+            'NO':
               2035: 0.002
             PL:
               2035: 7.32
@@ -1373,7 +1373,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.001
             NL:
               2035: 1.992
-            NO:
+            'NO':
               2035: 0.994
             PL:
               2035: 3.25
@@ -1404,7 +1404,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.001
             NL:
               2035: 0.004
-            NO:
+            'NO':
               2035: 0
             PL:
               2035: 1.705
@@ -1459,7 +1459,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.008
             NL:
               2035: 12.313
-            NO:
+            'NO':
               2035: 8.817
             PL:
               2035: 20.932
@@ -1490,7 +1490,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.004
             NL:
               2035: 0.016
-            NO:
+            'NO':
               2035: 0.002
             PL:
               2035: 7.32
@@ -1522,7 +1522,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.001
             NL:
               2035: 1.992
-            NO:
+            'NO':
               2035: 0.994
             PL:
               2035: 3.25
@@ -1553,7 +1553,7 @@ KN2045_Mix_FixedRenewables_BESS_DSM05_EUStationaryScale_P20:
               2035: 0.001
             NL:
               2035: 0.004
-            NO:
+            'NO':
               2035: 0
             PL:
               2035: 1.705
