@@ -209,6 +209,7 @@ def write_weather_dependent_config(config, scenario, weather_year):
 def write_to_scenario_yaml(input, output, scenarios, df):
     # read in yaml file
     yaml = ruamel.yaml.YAML()
+    yaml.preserve_quotes = True
     file_path = Path(input)
     config = yaml.load(file_path)
 
