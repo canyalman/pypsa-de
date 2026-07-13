@@ -1029,12 +1029,17 @@ def add_TES_charger_ratio_constraints(n: pypsa.Network) -> None:
     n.model.add_constraints(lhs == 0, name="TES_charger_ratio")
 
 
-def add_battery_constraints(n):
+def add_battery_constraints(n, planning_horizons=None):
     """
     Add battery sizing constraints.
 
     For utility-scale batteries, enforce a 4-hour storage duration:
         Store-e_nom - 4 * Link-p_nom(discharger) = 0
+
+    For home batteries outside Germany, enforce the German exogenous E/P ratio
+    for the active planning year at country level. This includes fixed capacity
+    carried over from earlier years while preserving flexible siting within each
+    country.
 
     Also ensure that charger = discharger, i.e.
         1 * charger_size - efficiency * discharger_size = 0
@@ -1045,6 +1050,36 @@ def add_battery_constraints(n):
     battery_duration_hours = {
         "battery": 4.0,
     }
+    investment_year = (
+        int(planning_horizons) if planning_horizons is not None else None
+    )
+
+    home_duration = None
+    if investment_year == 2025:
+        # Germany is fixed at zero in 2025, so no E/P ratio can be inferred.
+        home_duration = 2.0
+    elif investment_year is not None:
+        capacity_min = (
+            n.config.get("solving", {})
+            .get("constraints", {})
+            .get("limits_capacity_min", {})
+        )
+        home_energy_by_year = (
+            capacity_min.get("Store", {}).get("home battery", {}).get("DE", {})
+        )
+        home_power_by_year = (
+            capacity_min.get("Link", {})
+            .get("home battery discharger", {})
+            .get("DE", {})
+        )
+        home_energy = home_energy_by_year.get(
+            investment_year, home_energy_by_year.get(str(investment_year))
+        )
+        home_power = home_power_by_year.get(
+            investment_year, home_power_by_year.get(str(investment_year))
+        )
+        if home_energy is not None and home_power:
+            home_duration = home_energy / home_power
 
     linear_expr_list = []
     for store_carrier, duration in battery_duration_hours.items():
@@ -1084,6 +1119,55 @@ def add_battery_constraints(n):
             linear_expr_list, dim=dim, cls=type(linear_expr_list[0])
         )
         n.model.add_constraints(merged_expr == 0, name="Battery-storage_duration")
+
+    if home_duration is not None:
+        home_stores = n.stores[n.stores.carrier == "home battery"]
+        home_dischargers = n.links[n.links.carrier == "home battery discharger"]
+        store_countries = home_stores.bus.map(n.buses.country)
+        discharger_countries = home_dischargers.bus1.map(n.buses.country)
+        countries = sorted(
+            (set(store_countries.dropna()) | set(discharger_countries.dropna()))
+            - {"", "DE"}
+        )
+
+        home_expr_list = []
+        for country in countries:
+            stores_country = home_stores.index[store_countries == country]
+            dischargers_country = home_dischargers.index[
+                discharger_countries == country
+            ]
+            stores_ext = stores_country[
+                n.stores.loc[stores_country, "e_nom_extendable"]
+            ]
+            dischargers_ext = dischargers_country[
+                n.links.loc[dischargers_country, "p_nom_extendable"]
+            ]
+
+            if stores_ext.empty or dischargers_ext.empty:
+                logger.warning(
+                    "No extendable home-battery Store or discharger found in "
+                    "%s for the %s duration constraint.",
+                    country,
+                    investment_year,
+                )
+                continue
+
+            stores_fixed = stores_country.difference(stores_ext)
+            dischargers_fixed = dischargers_country.difference(dischargers_ext)
+            store_expr = n.model["Store-e_nom"].loc[stores_ext].sum()
+            store_expr += n.stores.loc[stores_fixed, "e_nom"].sum()
+            discharger_expr = n.model["Link-p_nom"].loc[dischargers_ext].sum()
+            discharger_expr += n.links.loc[dischargers_fixed, "p_nom"].sum()
+            home_expr_list.append(store_expr - home_duration * discharger_expr)
+
+        if home_expr_list:
+            dim = "Store-ext, Link-ext" if PYPSA_V1 else "name"
+            merged_expr = linopy.expressions.merge(
+                home_expr_list, dim=dim, cls=type(home_expr_list[0])
+            )
+            n.model.add_constraints(
+                merged_expr == 0, name="Home-battery-storage_duration"
+            )
 
     discharger_bool = n.links.index.str.contains("battery discharger")
     charger_bool = n.links.index.str.contains("battery charger")
@@ -1326,7 +1410,7 @@ def extra_functionality(
             add_TES_energy_to_power_ratio_constraints(n)
             add_TES_charger_ratio_constraints(n)
 
-    add_battery_constraints(n)
+    add_battery_constraints(n, planning_horizons)
     add_lossy_bidirectional_link_constraints(n)
     add_pipe_retrofit_constraint(n)
     if n._multi_invest:

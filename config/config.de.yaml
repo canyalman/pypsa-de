@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: base_run_4h
+  prefix: base_run_4h_home_battery_ep
   name:
   # - ExPol
   # - KN2045_Mix
