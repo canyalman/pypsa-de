@@ -66,6 +66,37 @@ def add_brownfield(
         lower=n.links.loc[dc_i, "p_nom_min"]
     )
 
+    # Keep utility-battery Store/charger/discharger triplets together. Applying
+    # the same absolute threshold independently to MW and MWh can otherwise
+    # retain a Store while dropping its lower-capacity power links.
+    battery_dischargers = n_p.links.index[
+        (n_p.links.carrier == "battery discharger")
+        & n_p.links.p_nom_extendable
+    ]
+    battery_stores = pd.Index(
+        [name.replace(" discharger", "") for name in battery_dischargers]
+    )
+    battery_chargers = pd.Index(
+        [name.replace(" discharger", " charger") for name in battery_dischargers]
+    )
+    paired_battery_assets = {
+        "Link": battery_dischargers.union(battery_chargers),
+        "Store": battery_stores,
+    }
+    small_battery_dischargers = battery_dischargers[
+        n_p.links.loc[battery_dischargers, "p_nom_opt"] < capacity_threshold
+    ]
+    small_battery_stores = pd.Index(
+        [name.replace(" discharger", "") for name in small_battery_dischargers]
+    )
+    small_battery_chargers = pd.Index(
+        [name.replace(" discharger", " charger") for name in small_battery_dischargers]
+    )
+    small_battery_assets = {
+        "Link": small_battery_dischargers.union(small_battery_chargers),
+        "Store": small_battery_stores,
+    }
+
     for c in n_p.components[["Link", "Generator", "Store"]]:
         if c.static.empty:
             continue
@@ -105,10 +136,19 @@ def add_brownfield(
                 ],
             )
 
+        paired_assets = paired_battery_assets.get(c.name, pd.Index([]))
+        n_p.remove(
+            c.name,
+            c.static.index.intersection(
+                small_battery_assets.get(c.name, pd.Index([]))
+            ),
+        )
+
         n_p.remove(
             c.name,
             c.static.index[
                 (c.static[f"{attr}_nom_extendable"] & ~c.static.index.isin(chp_heat))
+                & ~c.static.index.isin(paired_assets)
                 & (c.static[f"{attr}_nom_opt"] < capacity_threshold)
             ],
         )

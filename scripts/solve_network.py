@@ -1084,34 +1084,56 @@ def add_battery_constraints(n, planning_horizons=None):
     linear_expr_list = []
     for store_carrier, duration in battery_duration_hours.items():
         discharger_carrier = f"{store_carrier} discharger"
+        dischargers = n.links[n.links.carrier == discharger_carrier].index
+        stores = n.stores[n.stores.carrier == store_carrier].index
+        paired_stores = pd.Index(
+            [discharger.replace(" discharger", "") for discharger in dischargers]
+        )
+        orphan_stores = stores.difference(paired_stores)
 
-        dischargers_ext = n.links[
-            (n.links.carrier == discharger_carrier) & n.links.p_nom_extendable
-        ].index
-        stores_ext = n.stores[
-            (n.stores.carrier == store_carrier) & n.stores.e_nom_extendable
-        ].index
-
-        if dischargers_ext.empty or stores_ext.empty:
-            logger.warning(
-                f"No valid extendable {store_carrier} stores or discharger links "
-                "found for 4-hour battery duration constraints. Not enforcing "
-                f"duration constraints for {store_carrier}."
+        if not orphan_stores.empty:
+            raise RuntimeError(
+                f"Found {store_carrier} Stores without matching dischargers: "
+                f"{orphan_stores.tolist()}. Battery brownfield components must be "
+                "carried over as complete Store/charger/discharger triplets."
             )
-            continue
 
-        for discharger in dischargers_ext:
-            store = discharger.replace(" discharger", "")
-            if store not in stores_ext:
+        for discharger, store in zip(dischargers, paired_stores, strict=True):
+            if store not in stores:
                 raise RuntimeError(
                     f"Discharger {discharger} and store {store} do not match. "
                     "Ensure that the battery store and discharger are in the same "
                     "location and refer to the same technology."
                 )
 
-            store_var = n.model["Store-e_nom"].loc[store]
-            discharger_var = n.model["Link-p_nom"].loc[discharger]
-            linear_expr_list.append(store_var - duration * discharger_var)
+            store_extendable = n.stores.at[store, "e_nom_extendable"]
+            discharger_extendable = n.links.at[discharger, "p_nom_extendable"]
+
+            if store_extendable:
+                store_expr = n.model["Store-e_nom"].loc[store]
+            else:
+                store_expr = n.stores.at[store, "e_nom"]
+
+            if discharger_extendable:
+                discharger_expr = n.model["Link-p_nom"].loc[discharger]
+            else:
+                discharger_expr = n.links.at[discharger, "p_nom"]
+
+            if not store_extendable and not discharger_extendable:
+                if not np.isclose(
+                    store_expr,
+                    duration * discharger_expr,
+                    rtol=1e-6,
+                    atol=1e-3,
+                ):
+                    raise RuntimeError(
+                        f"Fixed {store_carrier} pair {store}/{discharger} has "
+                        f"{store_expr} MWh and {discharger_expr} MW, which violates "
+                        f"the {duration}-hour duration assumption."
+                    )
+                continue
+
+            linear_expr_list.append(store_expr - duration * discharger_expr)
 
     if linear_expr_list:
         dim = "Store-ext, Link-ext" if PYPSA_V1 else "name"
