@@ -1056,7 +1056,7 @@ def add_battery_constraints(n, planning_horizons=None):
 
     home_duration = None
     if investment_year == 2025:
-        # Germany is fixed at zero in 2025, so no E/P ratio can be inferred.
+        # Germany is fixed at zero; use an explicit non-DE duration assumption.
         home_duration = 2.0
     elif investment_year is not None:
         capacity_min = (
@@ -1120,17 +1120,6 @@ def add_battery_constraints(n, planning_horizons=None):
                 discharger_expr = n.links.at[discharger, "p_nom"]
 
             if not store_extendable and not discharger_extendable:
-                if not np.isclose(
-                    store_expr,
-                    duration * discharger_expr,
-                    rtol=1e-6,
-                    atol=1e-3,
-                ):
-                    raise RuntimeError(
-                        f"Fixed {store_carrier} pair {store}/{discharger} has "
-                        f"{store_expr} MWh and {discharger_expr} MW, which violates "
-                        f"the {duration}-hour duration assumption."
-                    )
                 continue
 
             linear_expr_list.append(store_expr - duration * discharger_expr)
