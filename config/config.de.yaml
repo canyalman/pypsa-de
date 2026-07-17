@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: base_3h
+  prefix: endo_3h
   name:
   # - ExPol
   # - KN2045_Mix

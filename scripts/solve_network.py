@@ -1033,8 +1033,11 @@ def add_battery_constraints(n, planning_horizons=None):
     """
     Add battery sizing constraints.
 
-    For utility-scale batteries, enforce a 3-hour storage duration:
-        Store-e_nom - 3 * Link-p_nom(discharger) = 0
+    For utility-scale batteries outside Germany, enforce a 3-hour storage
+    duration for every Store/discharger pair. Germany's observed 2025 fleet is
+    fixed through capacity limits at its actual E/P ratio. From 2030 onward,
+    enforce a 3-hour duration for the aggregate German utility-battery fleet,
+    including capacity carried over from earlier planning horizons.
 
     For home batteries outside Germany, enforce the German exogenous E/P ratio
     for the active planning year at country level. This includes fixed capacity
@@ -1106,6 +1109,10 @@ def add_battery_constraints(n, planning_horizons=None):
                     "location and refer to the same technology."
                 )
 
+            country = n.buses.at[n.links.at[discharger, "bus1"], "country"]
+            if country == "DE":
+                continue
+
             store_extendable = n.stores.at[store, "e_nom_extendable"]
             discharger_extendable = n.links.at[discharger, "p_nom_extendable"]
 
@@ -1123,6 +1130,39 @@ def add_battery_constraints(n, planning_horizons=None):
                 continue
 
             linear_expr_list.append(store_expr - duration * discharger_expr)
+
+        if investment_year is not None and investment_year > 2025:
+            store_countries = n.stores.loc[stores, "bus"].map(n.buses.country)
+            discharger_countries = n.links.loc[dischargers, "bus1"].map(
+                n.buses.country
+            )
+            stores_de = stores[store_countries == "DE"]
+            dischargers_de = dischargers[discharger_countries == "DE"]
+            stores_de_ext = stores_de[n.stores.loc[stores_de, "e_nom_extendable"]]
+            dischargers_de_ext = dischargers_de[
+                n.links.loc[dischargers_de, "p_nom_extendable"]
+            ]
+
+            if stores_de_ext.empty or dischargers_de_ext.empty:
+                logger.warning(
+                    "No extendable German utility-battery Store or discharger "
+                    "found for the %s aggregate duration constraint.",
+                    investment_year,
+                )
+            else:
+                stores_de_fixed = stores_de.difference(stores_de_ext)
+                dischargers_de_fixed = dischargers_de.difference(
+                    dischargers_de_ext
+                )
+                store_expr = n.model["Store-e_nom"].loc[stores_de_ext].sum()
+                store_expr += n.stores.loc[stores_de_fixed, "e_nom"].sum()
+                discharger_expr = n.model["Link-p_nom"].loc[
+                    dischargers_de_ext
+                ].sum()
+                discharger_expr += n.links.loc[
+                    dischargers_de_fixed, "p_nom"
+                ].sum()
+                linear_expr_list.append(store_expr - duration * discharger_expr)
 
     if linear_expr_list:
         dim = "Store-ext, Link-ext" if PYPSA_V1 else "name"
