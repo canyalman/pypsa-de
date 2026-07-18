@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_nonde_4h
+  prefix: bess_fixed_nonde_3h
   name:
   # - ExPol
   # - KN2045_Mix
@@ -462,17 +462,17 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
-    # Fix all non-German capacity variables to the latest endogenous 4h reference.
+    # Fix all non-German capacity variables to the latest endogenous 3h reference.
     # Dispatch, cross-border flows, and all German endogenous capacity decisions remain free.
     fixed_neighbor_capacities:
       enable: true
       domestic_country: DE
       strict_asset_match: true
-      capacity_manifest: resources/fixed_neighbor_endo_4h_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_endo_3h_capacities.csv
       reference_networks:
-        2025: cluster-results/endo_4h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/endo_4h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/endo_4h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+        2025: cluster-results/endo_3h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+        2030: cluster-results/endo_3h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+        2035: cluster-results/endo_3h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
     limits_capacity_max:
       Generator:
         onwind:

@@ -1033,12 +1033,12 @@ def add_battery_constraints(n, planning_horizons=None):
     """
     Add battery sizing constraints.
 
-    For utility-scale batteries outside Germany, enforce a 4-hour storage
+    For utility-scale batteries outside Germany, enforce a 3-hour storage
     duration at each battery bus across all investment vintages. This allows a
     longer-lived Store to use a replacement charger/discharger after the power
     electronics reach the end of their lifetime. Germany's observed 2025 fleet
     is fixed through capacity limits at its actual E/P ratio. From 2030 onward,
-    enforce a 4-hour duration for the aggregate German utility-battery fleet,
+    enforce a 3-hour duration for the aggregate German utility-battery fleet,
     including capacity carried over from earlier planning horizons.
 
     For home batteries outside Germany, enforce the German exogenous E/P ratio
@@ -1053,7 +1053,7 @@ def add_battery_constraints(n, planning_horizons=None):
         return
 
     battery_duration_hours = {
-        "battery": 4.0,
+        "battery": 3.0,
     }
     investment_year = (
         int(planning_horizons) if planning_horizons is not None else None
