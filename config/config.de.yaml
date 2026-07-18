@@ -4,11 +4,14 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: endo_4h_1h
+  prefix: bess_free_eu_4h_1h
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BESS_Existing
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
