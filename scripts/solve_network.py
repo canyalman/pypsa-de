@@ -1034,8 +1034,10 @@ def add_battery_constraints(n, planning_horizons=None):
     Add battery sizing constraints.
 
     For utility-scale batteries outside Germany, enforce a 4-hour storage
-    duration for every Store/discharger pair. Germany's observed 2025 fleet is
-    fixed through capacity limits at its actual E/P ratio. From 2030 onward,
+    duration at each battery bus across all investment vintages. This allows a
+    longer-lived Store to use a replacement charger/discharger after the power
+    electronics reach the end of their lifetime. Germany's observed 2025 fleet
+    is fixed through capacity limits at its actual E/P ratio. From 2030 onward,
     enforce a 4-hour duration for the aggregate German utility-battery fleet,
     including capacity carried over from earlier planning horizons.
 
@@ -1056,6 +1058,16 @@ def add_battery_constraints(n, planning_horizons=None):
     investment_year = (
         int(planning_horizons) if planning_horizons is not None else None
     )
+    duration_config = n.config.get("battery_storage_duration", {})
+    excluded_country_years = {
+        country: {int(year) for year in years}
+        for country, years in duration_config.get("exclude", {}).items()
+    }
+    excluded_countries = {
+        country
+        for country, years in excluded_country_years.items()
+        if investment_year in years
+    }
 
     home_duration = None
     if investment_year == 2025:
@@ -1084,84 +1096,79 @@ def add_battery_constraints(n, planning_horizons=None):
         if home_energy is not None and home_power:
             home_duration = home_energy / home_power
 
+    def nominal_expression(static, component, indices, attr):
+        """Return fixed plus extendable nominal capacity and whether it varies."""
+        if indices.empty:
+            return None, False
+
+        extendable = indices[static.loc[indices, f"{attr}_nom_extendable"]]
+        fixed = indices.difference(extendable)
+        fixed_capacity = static.loc[fixed, f"{attr}_nom"].sum()
+        if extendable.empty:
+            return fixed_capacity, False
+
+        expression = n.model[f"{component}-{attr}_nom"].loc[extendable].sum()
+        return expression + fixed_capacity, True
+
     linear_expr_list = []
     for store_carrier, duration in battery_duration_hours.items():
         discharger_carrier = f"{store_carrier} discharger"
         dischargers = n.links[n.links.carrier == discharger_carrier].index
         stores = n.stores[n.stores.carrier == store_carrier].index
-        paired_stores = pd.Index(
-            [discharger.replace(" discharger", "") for discharger in dischargers]
+        store_buses = n.stores.loc[stores, "bus"]
+        discharger_buses = n.links.loc[dischargers, "bus0"]
+        battery_buses = pd.Index(store_buses.unique()).union(
+            pd.Index(discharger_buses.unique())
         )
-        orphan_stores = stores.difference(paired_stores)
 
-        if not orphan_stores.empty:
-            raise RuntimeError(
-                f"Found {store_carrier} Stores without matching dischargers: "
-                f"{orphan_stores.tolist()}. Battery brownfield components must be "
-                "carried over as complete Store/charger/discharger triplets."
-            )
+        for battery_bus in battery_buses:
+            country = n.buses.at[battery_bus, "country"]
+            if country == "DE" or country in excluded_countries:
+                continue
 
-        for discharger, store in zip(dischargers, paired_stores, strict=True):
-            if store not in stores:
-                raise RuntimeError(
-                    f"Discharger {discharger} and store {store} do not match. "
-                    "Ensure that the battery store and discharger are in the same "
-                    "location and refer to the same technology."
+            stores_bus = stores[store_buses == battery_bus]
+            dischargers_bus = dischargers[discharger_buses == battery_bus]
+            if stores_bus.empty or dischargers_bus.empty:
+                logger.warning(
+                    "Skipping utility-battery duration constraint at %s because "
+                    "no Store or discharger is available.",
+                    battery_bus,
                 )
-
-            country = n.buses.at[n.links.at[discharger, "bus1"], "country"]
-            if country == "DE":
                 continue
 
-            store_extendable = n.stores.at[store, "e_nom_extendable"]
-            discharger_extendable = n.links.at[discharger, "p_nom_extendable"]
-
-            if store_extendable:
-                store_expr = n.model["Store-e_nom"].loc[store]
-            else:
-                store_expr = n.stores.at[store, "e_nom"]
-
-            if discharger_extendable:
-                discharger_expr = n.model["Link-p_nom"].loc[discharger]
-            else:
-                discharger_expr = n.links.at[discharger, "p_nom"]
-
-            if not store_extendable and not discharger_extendable:
+            store_expr, store_variable = nominal_expression(
+                n.stores, "Store", stores_bus, "e"
+            )
+            discharger_expr, discharger_variable = nominal_expression(
+                n.links, "Link", dischargers_bus, "p"
+            )
+            if not store_variable and not discharger_variable:
                 continue
-
             linear_expr_list.append(store_expr - duration * discharger_expr)
 
-        if investment_year is not None and investment_year > 2025:
-            store_countries = n.stores.loc[stores, "bus"].map(n.buses.country)
-            discharger_countries = n.links.loc[dischargers, "bus1"].map(
-                n.buses.country
-            )
+        if (
+            investment_year is not None
+            and investment_year > 2025
+            and "DE" not in excluded_countries
+        ):
+            store_countries = store_buses.map(n.buses.country)
+            discharger_countries = discharger_buses.map(n.buses.country)
             stores_de = stores[store_countries == "DE"]
             dischargers_de = dischargers[discharger_countries == "DE"]
-            stores_de_ext = stores_de[n.stores.loc[stores_de, "e_nom_extendable"]]
-            dischargers_de_ext = dischargers_de[
-                n.links.loc[dischargers_de, "p_nom_extendable"]
-            ]
+            store_expr, store_variable = nominal_expression(
+                n.stores, "Store", stores_de, "e"
+            )
+            discharger_expr, discharger_variable = nominal_expression(
+                n.links, "Link", dischargers_de, "p"
+            )
 
-            if stores_de_ext.empty or dischargers_de_ext.empty:
+            if store_expr is None or discharger_expr is None:
                 logger.warning(
-                    "No extendable German utility-battery Store or discharger "
+                    "No German utility-battery Store or discharger "
                     "found for the %s aggregate duration constraint.",
                     investment_year,
                 )
-            else:
-                stores_de_fixed = stores_de.difference(stores_de_ext)
-                dischargers_de_fixed = dischargers_de.difference(
-                    dischargers_de_ext
-                )
-                store_expr = n.model["Store-e_nom"].loc[stores_de_ext].sum()
-                store_expr += n.stores.loc[stores_de_fixed, "e_nom"].sum()
-                discharger_expr = n.model["Link-p_nom"].loc[
-                    dischargers_de_ext
-                ].sum()
-                discharger_expr += n.links.loc[
-                    dischargers_de_fixed, "p_nom"
-                ].sum()
+            elif store_variable or discharger_variable:
                 linear_expr_list.append(store_expr - duration * discharger_expr)
 
     if linear_expr_list:
