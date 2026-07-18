@@ -278,8 +278,8 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery:
             DE:
               2025: 4.058
-              2030: 36
-              2035: 60
+              2030: 27
+              2035: 45
           home battery:
             DE:
               2025: 0
@@ -317,8 +317,8 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery:
             DE:
               2025: 4.058
-              2030: 36
-              2035: 60
+              2030: 27
+              2035: 45
           home battery:
             DE:
               2025: 0
@@ -365,8 +365,8 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
           battery:
             DE:
               2025: 4.058
-              2030: 60
-              2035: 100
+              2030: 45
+              2035: 75
           home battery:
             DE:
               2025: 0
@@ -404,8 +404,8 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
           battery:
             DE:
               2025: 4.058
-              2030: 60
-              2035: 100
+              2030: 45
+              2035: 75
           home battery:
             DE:
               2025: 0
@@ -452,8 +452,8 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery:
             DE:
               2025: 4.058
-              2030: 84
-              2035: 140
+              2030: 63
+              2035: 105
           home battery:
             DE:
               2025: 0
@@ -491,8 +491,8 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery:
             DE:
               2025: 4.058
-              2030: 84
-              2035: 140
+              2030: 63
+              2035: 105
           home battery:
             DE:
               2025: 0
@@ -539,8 +539,8 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
           battery:
             DE:
               2025: 4.058
-              2030: 108
-              2035: 180
+              2030: 81
+              2035: 135
           home battery:
             DE:
               2025: 0
@@ -578,8 +578,8 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
           battery:
             DE:
               2025: 4.058
-              2030: 108
-              2035: 180
+              2030: 81
+              2035: 135
           home battery:
             DE:
               2025: 0
@@ -626,8 +626,8 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery:
             DE:
               2025: 4.058
-              2030: 132
-              2035: 220
+              2030: 99
+              2035: 165
           home battery:
             DE:
               2025: 0
@@ -665,8 +665,8 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery:
             DE:
               2025: 4.058
-              2030: 132
-              2035: 220
+              2030: 99
+              2035: 165
           home battery:
             DE:
               2025: 0

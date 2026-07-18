@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_free_eu
+  prefix: bess_free_eu_3h
   name:
   # - ExPol
   # - KN2045_Mix
