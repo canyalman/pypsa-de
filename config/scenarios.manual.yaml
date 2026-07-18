@@ -163,6 +163,528 @@ KN2045_Mix_FixedRenewables:
               2035: 11.477 # ERAA residential storage
 
 
+KN2045_Mix_FixedRenewables_BESS_Existing:
+  # No additional German utility-scale BESS expansion. Non-German capacity expansion remains endogenous.
+  battery_storage_duration:
+    exclude:
+      DE: [2025, 2030, 2035]
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 4.058
+              2035: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 2.705
+              2035: 2.705
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 4.058
+              2035: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 2.705
+              2035: 2.705
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+
+
+KN2045_Mix_FixedRenewables_BESS_15GW:
+  # 15 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  battery_storage_duration:
+    exclude:
+      DE: [2025, 2030, 2035]
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 36
+              2035: 60
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 9
+              2035: 15
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 36
+              2035: 60
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 9
+              2035: 15
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+
+
+KN2045_Mix_FixedRenewables_BESS_25GW:
+  # 25 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  battery_storage_duration:
+    exclude:
+      DE: [2025, 2030, 2035]
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 60
+              2035: 100
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 15
+              2035: 25
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 60
+              2035: 100
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 15
+              2035: 25
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+
+
+KN2045_Mix_FixedRenewables_BESS_35GW:
+  # 35 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  battery_storage_duration:
+    exclude:
+      DE: [2025, 2030, 2035]
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 84
+              2035: 140
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 21
+              2035: 35
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 84
+              2035: 140
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 21
+              2035: 35
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+
+
+KN2045_Mix_FixedRenewables_BESS_45GW:
+  # 45 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  battery_storage_duration:
+    exclude:
+      DE: [2025, 2030, 2035]
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 108
+              2035: 180
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 27
+              2035: 45
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 108
+              2035: 180
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 27
+              2035: 45
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+
+
+KN2045_Mix_FixedRenewables_BESS_55GW:
+  # 55 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  battery_storage_duration:
+    exclude:
+      DE: [2025, 2030, 2035]
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 132
+              2035: 220
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 33
+              2035: 55
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+              2030: 132
+              2035: 220
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2030: 33
+              2035: 55
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+
+
 KN2045_Mix_LowDecentralDiscount:
   costs:
     custom_cost_fn: data/pypsa-de/custom_costs_nep_2023_low_decentral_discount.csv
