@@ -1,12 +1,154 @@
 import logging
 import sys
+from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from xarray import DataArray
 
 from scripts.prepare_sector_network import determine_emission_sectors
 
 logger = logging.getLogger(__name__)
+
+
+FIXED_NEIGHBOR_COMPONENTS = {
+    "Generator": ("generators", "p", ("bus",)),
+    "Link": ("links", "p", ("bus0", "bus1", "bus2", "bus3")),
+    "Store": ("stores", "e", ("bus",)),
+    "StorageUnit": ("storage_units", "p", ("bus",)),
+    "Line": ("lines", "s", ("bus0", "bus1")),
+    "Transformer": ("transformers", "s", ("bus0", "bus1")),
+}
+
+
+def _asset_countries(n, static, bus_columns):
+    """Return all modelled countries connected to each asset."""
+    countries = {}
+    for asset, row in static.iterrows():
+        asset_countries = set()
+        for column in bus_columns:
+            if column not in row.index:
+                continue
+            bus = row[column]
+            if not isinstance(bus, str) or bus not in n.buses.index:
+                continue
+            country = n.buses.at[bus, "country"]
+            if pd.notna(country) and country:
+                asset_countries.add(str(country))
+        countries[asset] = asset_countries
+    return countries
+
+
+def _external_asset_index(n, static, bus_columns, domestic_country):
+    countries = _asset_countries(n, static, bus_columns)
+    return pd.Index(
+        [
+            asset
+            for asset, asset_countries in countries.items()
+            if any(country != domestic_country for country in asset_countries)
+        ]
+    )
+
+
+def add_fixed_neighbor_capacity_constraints(
+    n,
+    investment_year,
+    manifest_path,
+    domestic_country,
+    strict_asset_match=True,
+):
+    """Fix non-domestic nominal capacities to a solved reference network."""
+    manifest = pd.read_csv(manifest_path, dtype={"asset": str})
+    targets = manifest.loc[manifest["year"].eq(investment_year)].copy()
+    if targets.empty:
+        raise ValueError(
+            f"No fixed-neighbor capacity targets found for {investment_year} in "
+            f"{manifest_path}."
+        )
+
+    for component, (list_name, nominal_attr, bus_columns) in (
+        FIXED_NEIGHBOR_COMPONENTS.items()
+    ):
+        component_targets = targets.loc[targets["component"].eq(component)].copy()
+        if component_targets.empty:
+            continue
+        if component_targets["asset"].duplicated().any():
+            raise ValueError(
+                f"Duplicate {component} entries in fixed-neighbor manifest for "
+                f"{investment_year}."
+            )
+
+        component_targets = component_targets.set_index("asset")
+        static = getattr(n, list_name)
+        target_index = component_targets.index
+        missing = target_index.difference(static.index)
+        if strict_asset_match and not missing.empty:
+            raise ValueError(
+                f"{component}: {len(missing)} reference assets are missing from the "
+                f"current network, e.g. {missing[:3].tolist()}."
+            )
+        target_index = target_index.intersection(static.index)
+
+        active = static.get(
+            "active", pd.Series(True, index=static.index, dtype=bool)
+        ).fillna(False)
+        external_active = _external_asset_index(
+            n, static, bus_columns, domestic_country
+        ).intersection(static.index[active])
+        unexpected = external_active.difference(target_index)
+        if strict_asset_match and not unexpected.empty:
+            raise ValueError(
+                f"{component}: {len(unexpected)} active non-{domestic_country} assets "
+                f"are absent from the reference manifest, e.g. "
+                f"{unexpected[:3].tolist()}."
+            )
+
+        extendable_column = f"{nominal_attr}_nom_extendable"
+        nominal_column = f"{nominal_attr}_nom"
+        extendable = target_index[
+            active.loc[target_index]
+            & static.loc[target_index, extendable_column].fillna(False).astype(bool)
+        ]
+        fixed = target_index.difference(extendable)
+        if strict_asset_match and not fixed.empty:
+            expected = component_targets.loc[fixed, "nominal"]
+            actual = static.loc[fixed, nominal_column]
+            mismatch = ~np.isclose(actual, expected, rtol=1e-9, atol=1e-6)
+            if mismatch.any():
+                mismatched = fixed[np.asarray(mismatch)]
+                raise ValueError(
+                    f"{component}: {len(mismatched)} fixed non-{domestic_country} "
+                    f"capacities differ from the reference, e.g. "
+                    f"{mismatched[:3].tolist()}."
+                )
+
+        if extendable.empty:
+            logger.info(
+                "Fixed-neighbor %s: no extendable non-%s assets in %s.",
+                component,
+                domestic_country,
+                investment_year,
+            )
+            continue
+
+        nominal = n.model[f"{component}-{nominal_attr}_nom"].loc[extendable]
+        rhs = DataArray(
+            component_targets.loc[extendable, "nominal"].to_numpy(),
+            coords={"name": extendable},
+            dims=("name",),
+        )
+        n.model.add_constraints(
+            nominal == rhs,
+            name=f"FixedNeighbor-{component}-{nominal_attr}_nom",
+        )
+        logger.info(
+            "Fixed-neighbor %s: constrained %s non-%s %s_nom capacities in %s.",
+            component,
+            len(extendable),
+            domestic_country,
+            nominal_attr,
+            investment_year,
+        )
 
 
 def add_capacity_limits(n, investment_year, limits_capacity, sense="maximum"):
@@ -840,6 +982,16 @@ def additional_functionality(n, snapshots, snakemake):
     add_capacity_limits(
         n, investment_year, constraints["limits_capacity_max"], "maximum"
     )
+
+    fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
+    if fixed_neighbor.get("enable", False):
+        add_fixed_neighbor_capacity_constraints(
+            n,
+            investment_year,
+            Path(snakemake.input.fixed_neighbor_capacities),
+            fixed_neighbor["domestic_country"],
+            fixed_neighbor.get("strict_asset_match", True),
+        )
 
     add_power_limits(n, investment_year, constraints["limits_power_max"])
 
