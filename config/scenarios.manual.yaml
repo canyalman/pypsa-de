@@ -164,7 +164,8 @@ KN2045_Mix_FixedRenewables:
 
 
 KN2045_Mix_FixedRenewables_BESS_Existing:
-  # No additional German utility-scale BESS expansion. Non-German capacity expansion remains endogenous.
+  # No additional German utility-scale BESS expansion.
+  # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
       DE: [2025, 2030, 2035]
@@ -251,7 +252,8 @@ KN2045_Mix_FixedRenewables_BESS_Existing:
 
 
 KN2045_Mix_FixedRenewables_BESS_15GW:
-  # 15 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  # 15 GW / 60 GWh German utility-scale BESS pathway in 2035.
+  # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
       DE: [2025, 2030, 2035]
@@ -338,7 +340,8 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
 
 
 KN2045_Mix_FixedRenewables_BESS_25GW:
-  # 25 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  # 25 GW / 100 GWh German utility-scale BESS pathway in 2035.
+  # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
       DE: [2025, 2030, 2035]
@@ -425,7 +428,8 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
 
 
 KN2045_Mix_FixedRenewables_BESS_35GW:
-  # 35 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  # 35 GW / 140 GWh German utility-scale BESS pathway in 2035.
+  # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
       DE: [2025, 2030, 2035]
@@ -512,7 +516,8 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
 
 
 KN2045_Mix_FixedRenewables_BESS_45GW:
-  # 45 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  # 45 GW / 180 GWh German utility-scale BESS pathway in 2035.
+  # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
       DE: [2025, 2030, 2035]
@@ -599,7 +604,8 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
 
 
 KN2045_Mix_FixedRenewables_BESS_55GW:
-  # 55 GW German utility-scale BESS pathway in 2035. Non-German capacity expansion remains endogenous.
+  # 55 GW / 220 GWh German utility-scale BESS pathway in 2035.
+  # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
       DE: [2025, 2030, 2035]
