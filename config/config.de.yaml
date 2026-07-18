@@ -10,9 +10,13 @@ run:
   # - KN2045_Mix
   - KN2045_Mix_FixedRenewables_BESS_Existing
   - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_20GW
   - KN2045_Mix_FixedRenewables_BESS_25GW
+  - KN2045_Mix_FixedRenewables_BESS_30GW
   - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_40GW
   - KN2045_Mix_FixedRenewables_BESS_45GW
+  - KN2045_Mix_FixedRenewables_BESS_50GW
   - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
