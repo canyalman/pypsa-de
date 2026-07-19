@@ -1046,6 +1046,12 @@ def add_battery_constraints(n, planning_horizons=None):
     carried over from earlier years while preserving flexible siting within each
     country.
 
+    When fixed-neighbor capacities are enabled, omit the non-domestic battery
+    sizing equations. The Store and Link capacities are already fixed
+    individually to a solved reference network which includes these sizing
+    assumptions; adding them again can overdetermine the fixed portfolio due to
+    solver-tolerance residuals in the exported reference capacities.
+
     Also ensure that charger = discharger, i.e.
         1 * charger_size - efficiency * discharger_size = 0
     """
@@ -1059,6 +1065,13 @@ def add_battery_constraints(n, planning_horizons=None):
         int(planning_horizons) if planning_horizons is not None else None
     )
     duration_config = n.config.get("battery_storage_duration", {})
+    fixed_neighbor_config = (
+        n.config.get("solving", {})
+        .get("constraints", {})
+        .get("fixed_neighbor_capacities", {})
+    )
+    fixed_neighbor_enabled = fixed_neighbor_config.get("enable", False)
+    domestic_country = fixed_neighbor_config.get("domestic_country", "DE")
     excluded_country_years = {
         country: {int(year) for year in years}
         for country, years in duration_config.get("exclude", {}).items()
@@ -1068,6 +1081,12 @@ def add_battery_constraints(n, planning_horizons=None):
         for country, years in excluded_country_years.items()
         if investment_year in years
     }
+    if fixed_neighbor_enabled:
+        logger.info(
+            "Skipping non-%s battery sizing constraints because capacities "
+            "are fixed to the solved reference network.",
+            domestic_country,
+        )
 
     home_duration = None
     if investment_year == 2025:
@@ -1123,7 +1142,11 @@ def add_battery_constraints(n, planning_horizons=None):
 
         for battery_bus in battery_buses:
             country = n.buses.at[battery_bus, "country"]
-            if country == "DE" or country in excluded_countries:
+            if (
+                country == "DE"
+                or country in excluded_countries
+                or (fixed_neighbor_enabled and country != domestic_country)
+            ):
                 continue
 
             stores_bus = stores[store_buses == battery_bus]
@@ -1178,7 +1201,7 @@ def add_battery_constraints(n, planning_horizons=None):
         )
         n.model.add_constraints(merged_expr == 0, name="Battery-storage_duration")
 
-    if home_duration is not None:
+    if home_duration is not None and not fixed_neighbor_enabled:
         home_stores = n.stores[n.stores.carrier == "home battery"]
         home_dischargers = n.links[n.links.carrier == "home battery discharger"]
         store_countries = home_stores.bus.map(n.buses.country)
