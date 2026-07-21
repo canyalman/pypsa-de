@@ -256,7 +256,7 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
   # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2030, 2035]
+      DE: [2025, 2035]
   solving:
     constraints:
       limits_capacity_min:
@@ -280,7 +280,6 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery:
             DE:
               2025: 4.058
-              2030: 27
               2035: 45
           home battery:
             DE:
@@ -291,7 +290,6 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 9
               2035: 15
           home battery discharger:
             DE:
@@ -319,7 +317,6 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery:
             DE:
               2025: 4.058
-              2030: 27
               2035: 45
           home battery:
             DE:
@@ -330,7 +327,6 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 9
               2035: 15
           home battery discharger:
             DE:
@@ -432,7 +428,7 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
   # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2030, 2035]
+      DE: [2025, 2035]
   solving:
     constraints:
       limits_capacity_min:
@@ -456,7 +452,6 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
           battery:
             DE:
               2025: 4.058
-              2030: 45
               2035: 75
           home battery:
             DE:
@@ -467,7 +462,6 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 15
               2035: 25
           home battery discharger:
             DE:
@@ -495,7 +489,6 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
           battery:
             DE:
               2025: 4.058
-              2030: 45
               2035: 75
           home battery:
             DE:
@@ -506,7 +499,6 @@ KN2045_Mix_FixedRenewables_BESS_25GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 15
               2035: 25
           home battery discharger:
             DE:
@@ -608,7 +600,7 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
   # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2030, 2035]
+      DE: [2025, 2035]
   solving:
     constraints:
       limits_capacity_min:
@@ -632,7 +624,6 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery:
             DE:
               2025: 4.058
-              2030: 63
               2035: 105
           home battery:
             DE:
@@ -643,7 +634,6 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 21
               2035: 35
           home battery discharger:
             DE:
@@ -671,7 +661,6 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery:
             DE:
               2025: 4.058
-              2030: 63
               2035: 105
           home battery:
             DE:
@@ -682,7 +671,6 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 21
               2035: 35
           home battery discharger:
             DE:
@@ -784,7 +772,7 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
   # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2030, 2035]
+      DE: [2025, 2035]
   solving:
     constraints:
       limits_capacity_min:
@@ -808,7 +796,6 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
           battery:
             DE:
               2025: 4.058
-              2030: 81
               2035: 135
           home battery:
             DE:
@@ -819,7 +806,6 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 27
               2035: 45
           home battery discharger:
             DE:
@@ -847,7 +833,6 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
           battery:
             DE:
               2025: 4.058
-              2030: 81
               2035: 135
           home battery:
             DE:
@@ -858,7 +843,6 @@ KN2045_Mix_FixedRenewables_BESS_45GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 27
               2035: 45
           home battery discharger:
             DE:
@@ -960,7 +944,7 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
   # Non-German capacity is fixed by the branch-level reference configuration.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2030, 2035]
+      DE: [2025, 2035]
   solving:
     constraints:
       limits_capacity_min:
@@ -984,7 +968,6 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery:
             DE:
               2025: 4.058
-              2030: 99
               2035: 165
           home battery:
             DE:
@@ -995,7 +978,6 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 33
               2035: 55
           home battery discharger:
             DE:
@@ -1023,7 +1005,6 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery:
             DE:
               2025: 4.058
-              2030: 99
               2035: 165
           home battery:
             DE:
@@ -1034,7 +1015,6 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery discharger:
             DE:
               2025: 2.705
-              2030: 33
               2035: 55
           home battery discharger:
             DE:

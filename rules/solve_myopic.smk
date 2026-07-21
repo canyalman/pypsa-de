@@ -212,3 +212,32 @@ if fixed_neighbor_capacities.get("enable", False):
 
 
     ruleorder: reuse_fixed_neighbor_baseyear > solve_sector_network_myopic
+
+    reuse_reference_horizons = [
+        str(year)
+        for year in fixed_neighbor_capacities.get("reuse_reference_horizons", [])
+    ]
+    reuse_reference_runs = fixed_neighbor_capacities.get(
+        "reuse_reference_runs", []
+    )
+
+    if reuse_reference_horizons and reuse_reference_runs:
+
+        rule reuse_fixed_neighbor_common_horizon:
+            input:
+                reference_network=lambda w: fixed_neighbor_capacities[
+                    "reference_networks"
+                ][int(w.planning_horizons)],
+            output:
+                network=RESULTS
+                + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+            wildcard_constraints:
+                planning_horizons="|".join(reuse_reference_horizons),
+                run="|".join(reuse_reference_runs),
+            message:
+                "Reusing the fixed-neighbor reference network for {wildcards.run} in {wildcards.planning_horizons}"
+            script:
+                scripts("pypsa-de/reuse_fixed_neighbor_baseyear.py")
+
+
+        ruleorder: reuse_fixed_neighbor_common_horizon > solve_sector_network_myopic
