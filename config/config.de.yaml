@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: endo_4h
+  prefix: iron_air_ldes_100h
   name:
   # - ExPol
   # - KN2045_Mix
@@ -279,11 +279,15 @@ first_technology_occurrence:
     H2 pipeline: 2025
     H2 Electrolysis: 2025
     H2 pipeline retrofitted: 2025
+    iron-air charger: 2035
+    iron-air discharger: 2035
     urban central water pits charger: 2035
     urban central water pits discharger: 2035
   Store:
+    iron-air: 2035
     urban central water pits: 2035
   Bus:
+    iron-air: 2035
     urban central water pits: 2035
 costs:
   custom_cost_fn: data/pypsa-de/custom_costs_nep_2023.csv
@@ -662,6 +666,26 @@ electricity:
   powerplants_filter: (DateOut > 2025 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP") and (DateIn < 2026 or DateIn != DateIn)
   custom_powerplants: true
   custom_file: resources/german_chp.csv
+  extendable_carriers:
+    Store: [battery, H2, iron-air]
+  storage_options:
+    iron-air:
+      countries: [DE]
+      bus_carriers: [AC]
+      duration_hours_at_rated_ac_output: 100.0
+      charging_efficiency: 0.71
+      discharging_efficiency: 0.60
+      combined_capex_eur_per_kw_ac: 1617.0
+      fom_percent: 1.0
+      lifetime_years: 17.5
+      discount_rate: 0.07
+      standing_loss_per_hour: 0.0
+      marginal_cost_eur_per_mwh: 0.0
+      currency_year: 2024
+      source_capex_usd_per_kwh: 17.5
+      source_fom_usd_per_kw_year: 17.5
+      usd_per_eur_2024: 1.0824
+      source: "Form Energy, Navigating the Pacific Northwest's Energy Challenges, Appendix C, Table C1; central values supplied for this thesis"
   H2_plants:
     enable: EU # allowed values: false, DE, EU
     start: 2030 # should be < force
