@@ -8,7 +8,9 @@ run:
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -475,7 +477,9 @@ solving:
       # All controlled 2035 sensitivities share the endogenous reference history through 2030.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
-      - KN2045_Mix_FixedRenewables
+      - KN2045_Mix_FixedRenewables_BESS_15GW
+      - KN2045_Mix_FixedRenewables_BESS_35GW
+      - KN2045_Mix_FixedRenewables_BESS_55GW
     limits_capacity_max:
       Generator:
         onwind:
