@@ -4,16 +4,11 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_nonde_4h_endo2030
+  prefix: caes_fixed_nonde_4h
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BESS_Existing
-  - KN2045_Mix_FixedRenewables_BESS_15GW
-  - KN2045_Mix_FixedRenewables_BESS_25GW
-  - KN2045_Mix_FixedRenewables_BESS_35GW
-  - KN2045_Mix_FixedRenewables_BESS_45GW
-  - KN2045_Mix_FixedRenewables_BESS_55GW
+  - KN2045_Mix_FixedRenewables
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -476,6 +471,7 @@ solving:
       # All controlled 2035 sensitivities share the endogenous reference history through 2030.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
+      - KN2045_Mix_FixedRenewables
       - KN2045_Mix_FixedRenewables_BESS_15GW
       - KN2045_Mix_FixedRenewables_BESS_25GW
       - KN2045_Mix_FixedRenewables_BESS_35GW
@@ -686,6 +682,49 @@ electricity:
   powerplants_filter: (DateOut > 2025 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP") and (DateIn < 2026 or DateIn != DateIn)
   custom_powerplants: true
   custom_file: resources/german_chp.csv
+  storage_options:
+    aCAES:
+      enable: true
+      countries: [DE]
+      bus_carriers: [AC]
+      first_investment_year: 2035
+      charging_efficiency: 0.92
+      discharging_efficiency: 0.65
+      standing_loss_per_hour: 0.0
+      lifetime_years: 30
+      discount_rate: 0.07
+      marginal_cost_eur_per_mwh: 0.0
+
+      # Farah et al. values are used as reported; their EUR price year is not
+      # stated, so no inflation conversion is applied.
+      charge_capex_eur_per_kw_ac_input: 313.9
+      charge_fom_eur_per_kw_ac_input_year: 6.2784
+      discharge_capex_eur_per_kw_ac_output: 628.8
+      discharge_fom_eur_per_kw_ac_output_year: 12.58
+
+      # Store e_nom is usable internal working energy above minimum cavern
+      # pressure. Farah's gross-energy costs are divided by 0.8 so that their
+      # 20% minimum-SOC economics are retained without imposing a second
+      # physical reserve on the already-usable InSpEE cavern potential.
+      energy_capex_eur_per_kwh_usable_internal: 32.375
+      energy_fom_eur_per_kwh_usable_internal_year: 0.648
+      e_min_pu: 0.0
+
+      # InSpEE/InSpEE-DS reports 7.6 TWh of usable electrical output. The
+      # rounded regional rows total 7.7 TWh, so the allocations below are
+      # scaled uniformly by 7.6/7.7. Mecklenburg-Vorpommern is assigned to the
+      # eastern DE2 3 cluster. NRW is omitted because its rounded potential is
+      # approximately zero. Code converts each output cap to internal Store
+      # energy by dividing by the 0.65 discharge efficiency.
+      geological_output_capacity_twh: 7.6
+      site_output_capacities_twh:
+        DE2 2: 1.085714285714  # Hamburg / Schleswig-Holstein
+        DE2 3: 1.677922077922  # Berlin / Brandenburg + Mecklenburg-Vorpommern
+        DE2 5: 2.171428571429  # Bremen / Niedersachsen
+        DE2 7: 2.664935064935  # Sachsen-Anhalt + Thueringen
+
+      source_costs: "Farah et al. (2024), Applied Energy 360, 122203; arXiv:2309.02406"
+      source_geology: "BGR InSpEE and InSpEE-DS; official German CAES total 7.6 TWh electrical output"
   H2_plants:
     enable: EU # allowed values: false, DE, EU
     start: 2030 # should be < force

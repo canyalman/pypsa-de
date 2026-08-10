@@ -1226,6 +1226,201 @@ def attach_stores(
     )
 
 
+def attach_acaes(
+    n: pypsa.Network,
+    buses_i: pd.Index,
+    options: dict,
+    investment_year: int,
+) -> None:
+    """
+    Attach German A-CAES as independently extendable Store and Links.
+
+    The charger Link ``p_nom`` is measured as AC electricity input. The
+    discharger Link ``p_nom`` is measured on the internal storage bus, so its
+    source costs per MW AC output are multiplied by discharge efficiency. Store
+    ``e_nom`` represents usable internal working energy above the cavern's
+    minimum operating pressure. Configured geological potentials are electrical
+    output energy and are therefore divided by discharge efficiency.
+    """
+    if not options or not options.get("enable", False):
+        return
+    if investment_year < int(options["first_investment_year"]):
+        return
+
+    required = {
+        "countries",
+        "bus_carriers",
+        "charging_efficiency",
+        "discharging_efficiency",
+        "standing_loss_per_hour",
+        "lifetime_years",
+        "discount_rate",
+        "marginal_cost_eur_per_mwh",
+        "charge_capex_eur_per_kw_ac_input",
+        "charge_fom_eur_per_kw_ac_input_year",
+        "discharge_capex_eur_per_kw_ac_output",
+        "discharge_fom_eur_per_kw_ac_output_year",
+        "energy_capex_eur_per_kwh_usable_internal",
+        "energy_fom_eur_per_kwh_usable_internal_year",
+        "e_min_pu",
+        "geological_output_capacity_twh",
+        "site_output_capacities_twh",
+    }
+    missing_options = required.difference(options)
+    if missing_options:
+        raise ValueError(
+            "Missing A-CAES storage options: " + ", ".join(sorted(missing_options))
+        )
+
+    charge_efficiency = float(options["charging_efficiency"])
+    discharge_efficiency = float(options["discharging_efficiency"])
+    if not (0 < charge_efficiency <= 1 and 0 < discharge_efficiency <= 1):
+        raise ValueError(
+            "A-CAES charging and discharging efficiencies must be in (0, 1]."
+        )
+
+    e_min_pu = float(options["e_min_pu"])
+    if not np.isclose(e_min_pu, 0.0):
+        raise ValueError(
+            "A-CAES Store e_min_pu must be zero because e_nom is usable working "
+            "energy above minimum cavern pressure."
+        )
+
+    site_output_twh = pd.Series(options["site_output_capacities_twh"], dtype=float)
+    if site_output_twh.empty or (site_output_twh <= 0).any():
+        raise ValueError("A-CAES site output capacities must all be positive.")
+
+    national_output_twh = float(options["geological_output_capacity_twh"])
+    if not np.isclose(site_output_twh.sum(), national_output_twh):
+        raise ValueError(
+            "A-CAES site output capacities must sum to the configured national "
+            f"potential of {national_output_twh} TWh."
+        )
+
+    site_buses = pd.Index(site_output_twh.index)
+    available_buses = pd.Index(buses_i)
+    missing_buses = site_buses.difference(available_buses)
+    if not missing_buses.empty:
+        raise ValueError(
+            "Configured A-CAES sites are not clustered electricity buses: "
+            + ", ".join(map(str, missing_buses))
+        )
+
+    countries = set(options["countries"])
+    invalid_countries = site_buses[
+        ~n.buses.loc[site_buses, "country"].isin(countries).to_numpy()
+    ]
+    if not invalid_countries.empty:
+        raise ValueError(
+            "Configured A-CAES sites are outside the allowed countries: "
+            + ", ".join(map(str, invalid_countries))
+        )
+
+    bus_carriers = set(options["bus_carriers"])
+    invalid_carriers = site_buses[
+        ~n.buses.loc[site_buses, "carrier"].isin(bus_carriers).to_numpy()
+    ]
+    if not invalid_carriers.empty:
+        raise ValueError(
+            "Configured A-CAES sites do not have an allowed bus carrier: "
+            + ", ".join(map(str, invalid_carriers))
+        )
+
+    lifetime = float(options["lifetime_years"])
+    discount_rate = float(options["discount_rate"])
+    annuity = calculate_annuity(lifetime, discount_rate)
+    nyears = n.snapshot_weightings.generators.sum() / 8760.0
+
+    charge_investment = float(options["charge_capex_eur_per_kw_ac_input"]) * 1e3
+    charge_fom = float(options["charge_fom_eur_per_kw_ac_input_year"]) * 1e3
+    discharge_output_investment = (
+        float(options["discharge_capex_eur_per_kw_ac_output"]) * 1e3
+    )
+    discharge_output_fom = (
+        float(options["discharge_fom_eur_per_kw_ac_output_year"]) * 1e3
+    )
+    store_investment = float(options["energy_capex_eur_per_kwh_usable_internal"]) * 1e3
+    store_fom = float(options["energy_fom_eur_per_kwh_usable_internal_year"]) * 1e3
+
+    # The discharger variable is internal MW at bus0. Scaling output-based
+    # source costs by eta_d preserves the source cost per MW delivered to AC.
+    discharge_investment = discharge_output_investment * discharge_efficiency
+    discharge_fom = discharge_output_fom * discharge_efficiency
+
+    charge_capital_cost = (annuity * charge_investment + charge_fom) * nyears
+    discharge_capital_cost = (annuity * discharge_investment + discharge_fom) * nyears
+    store_capital_cost = (annuity * store_investment + store_fom) * nyears
+    marginal_cost = float(options["marginal_cost_eur_per_mwh"])
+
+    internal_buses = site_buses + " aCAES"
+    add_missing_carriers(n, ["aCAES", "aCAES charger", "aCAES discharger"])
+    n.add(
+        "Bus",
+        internal_buses,
+        location=site_buses,
+        carrier="aCAES",
+        country=n.buses.loc[site_buses, "country"].to_numpy(),
+        x=n.buses.loc[site_buses, "x"].to_numpy(),
+        y=n.buses.loc[site_buses, "y"].to_numpy(),
+    )
+
+    internal_energy_mwh = (
+        site_output_twh.loc[site_buses].to_numpy() / discharge_efficiency * 1e6
+    )
+    n.add(
+        "Store",
+        internal_buses,
+        bus=internal_buses,
+        carrier="aCAES",
+        e_nom_extendable=True,
+        e_nom_max=internal_energy_mwh,
+        e_min_pu=e_min_pu,
+        e_cyclic=True,
+        standing_loss=float(options["standing_loss_per_hour"]),
+        capital_cost=store_capital_cost,
+        onight_cost=store_investment,
+        marginal_cost=marginal_cost,
+        lifetime=lifetime,
+    )
+
+    n.add(
+        "Link",
+        internal_buses,
+        suffix=" charger",
+        bus0=site_buses,
+        bus1=internal_buses,
+        carrier="aCAES charger",
+        efficiency=charge_efficiency,
+        p_nom_extendable=True,
+        capital_cost=charge_capital_cost,
+        onight_cost=charge_investment,
+        marginal_cost=marginal_cost,
+        lifetime=lifetime,
+    )
+
+    n.add(
+        "Link",
+        internal_buses,
+        suffix=" discharger",
+        bus0=internal_buses,
+        bus1=site_buses,
+        carrier="aCAES discharger",
+        efficiency=discharge_efficiency,
+        p_nom_extendable=True,
+        capital_cost=discharge_capital_cost,
+        onight_cost=discharge_investment,
+        marginal_cost=marginal_cost,
+        lifetime=lifetime,
+    )
+
+    logger.info(
+        "Added endogenous A-CAES at %d German sites with %.3f TWh AC-output "
+        "geological potential.",
+        len(site_buses),
+        national_output_twh,
+    )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
