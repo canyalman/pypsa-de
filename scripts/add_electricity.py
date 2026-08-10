@@ -1226,6 +1226,282 @@ def attach_stores(
     )
 
 
+def attach_modular_acaes(
+    n: pypsa.Network,
+    buses_i: pd.Index,
+    options: dict,
+    project_options_file: str,
+    investment_year: int,
+) -> None:
+    """
+    Attach German A-CAES as discrete RESC whole-project options.
+
+    Each StorageUnit represents an integer number of complete projects. Its
+    nominal power is grid-side charging and electrical discharge power,
+    ``p_nom_mod`` is the source project rating, and ``max_hours`` is increased
+    by dispatch efficiency so that the source output duration remains
+    deliverable. The source CAPEX is a whole-plant cost per output kW and is
+    therefore charged only once on StorageUnit nominal power.
+    """
+    if not options or not options.get("enable", False):
+        return
+    if investment_year < int(options["first_investment_year"]):
+        return
+
+    required = {
+        "countries",
+        "bus_carriers",
+        "round_trip_efficiency",
+        "efficiency_split",
+        "charge_to_discharge_power_ratio",
+        "standing_loss_per_hour",
+        "minimum_soc_pu",
+        "cyclic_state_of_charge",
+        "lifetime_years",
+        "discount_rate",
+        "module_power_mw",
+        "output_duration_hours",
+        "currency_conversion",
+        "geological_output_capacity_twh",
+        "site_output_capacities_twh",
+    }
+    missing_options = required.difference(options)
+    if missing_options:
+        raise ValueError(
+            "Missing RESC A-CAES storage options: "
+            + ", ".join(sorted(missing_options))
+        )
+
+    round_trip_efficiency = float(options["round_trip_efficiency"])
+    if not 0 < round_trip_efficiency <= 1:
+        raise ValueError("RESC A-CAES round-trip efficiency must be in (0, 1].")
+    if options["efficiency_split"] != "symmetric":
+        raise ValueError("RESC A-CAES currently requires a symmetric efficiency split.")
+    efficiency_store = efficiency_dispatch = np.sqrt(round_trip_efficiency)
+
+    if not np.isclose(float(options["charge_to_discharge_power_ratio"]), 1.0):
+        raise ValueError(
+            "StorageUnit RESC A-CAES requires the approved 1:1 grid-side "
+            "charging-to-discharging power ratio."
+        )
+    if not np.isclose(float(options["minimum_soc_pu"]), 0.0):
+        raise ValueError("RESC A-CAES minimum SOC must be zero.")
+
+    site_output_twh = pd.Series(options["site_output_capacities_twh"], dtype=float)
+    if site_output_twh.empty or (site_output_twh <= 0).any():
+        raise ValueError("RESC A-CAES site output capacities must all be positive.")
+    national_output_twh = float(options["geological_output_capacity_twh"])
+    if not np.isclose(site_output_twh.sum(), national_output_twh):
+        raise ValueError(
+            "RESC A-CAES site output capacities must sum to the configured "
+            f"national potential of {national_output_twh} TWh."
+        )
+
+    site_buses = pd.Index(site_output_twh.index)
+    available_buses = pd.Index(buses_i)
+    missing_buses = site_buses.difference(available_buses)
+    if not missing_buses.empty:
+        raise ValueError(
+            "Configured RESC A-CAES sites are not clustered electricity buses: "
+            + ", ".join(map(str, missing_buses))
+        )
+
+    countries = set(options["countries"])
+    invalid_countries = site_buses[
+        ~n.buses.loc[site_buses, "country"].isin(countries).to_numpy()
+    ]
+    if not invalid_countries.empty:
+        raise ValueError(
+            "Configured RESC A-CAES sites are outside the allowed countries: "
+            + ", ".join(map(str, invalid_countries))
+        )
+
+    bus_carriers = set(options["bus_carriers"])
+    invalid_carriers = site_buses[
+        ~n.buses.loc[site_buses, "carrier"].isin(bus_carriers).to_numpy()
+    ]
+    if not invalid_carriers.empty:
+        raise ValueError(
+            "Configured RESC A-CAES sites do not have an allowed bus carrier: "
+            + ", ".join(map(str, invalid_carriers))
+        )
+
+    projects = pd.read_csv(project_options_file)
+    required_columns = {
+        "power_mw",
+        "output_duration_hours",
+        "rated_output_energy_mwh_per_module",
+        "capex_usd2022_per_kw",
+        "fom_usd2022_per_kw_year",
+        "vom_usd2022_per_mwh",
+        "usd2022_to_eur2020",
+        "capex_eur2020_per_kw",
+        "fom_eur2020_per_kw_year",
+        "vom_eur2020_per_mwh",
+    }
+    missing_columns = required_columns.difference(projects.columns)
+    if missing_columns:
+        raise ValueError(
+            "Missing columns in RESC A-CAES project table: "
+            + ", ".join(sorted(missing_columns))
+        )
+    if projects.duplicated(["power_mw", "output_duration_hours"]).any():
+        raise ValueError("Duplicate power-duration rows in RESC A-CAES project table.")
+
+    expected_power = {float(value) for value in options["module_power_mw"]}
+    expected_duration = {
+        float(value) for value in options["output_duration_hours"]
+    }
+    actual_options = set(
+        projects[["power_mw", "output_duration_hours"]]
+        .astype(float)
+        .itertuples(index=False, name=None)
+    )
+    expected_options = {
+        (power, duration)
+        for power in expected_power
+        for duration in expected_duration
+    }
+    if actual_options != expected_options:
+        missing = expected_options.difference(actual_options)
+        unexpected = actual_options.difference(expected_options)
+        raise ValueError(
+            "RESC A-CAES project table does not match configured options. "
+            f"Missing: {sorted(missing)}; unexpected: {sorted(unexpected)}."
+        )
+
+    expected_energy = projects["power_mw"] * projects["output_duration_hours"]
+    if not np.allclose(
+        projects["rated_output_energy_mwh_per_module"], expected_energy
+    ):
+        raise ValueError("RESC A-CAES rated output energy must equal power times duration.")
+
+    conversion = options["currency_conversion"]
+    conversion_factor = (
+        1.0
+        / float(conversion["usd_per_eur_2022"])
+        / (1.0 + float(conversion["euro_area_hicp_change_2021"]))
+        / (1.0 + float(conversion["euro_area_hicp_change_2022"]))
+    )
+    configured_factor = float(conversion["usd2022_to_eur2020"])
+    if not np.isclose(conversion_factor, configured_factor, rtol=1e-12):
+        raise ValueError("Configured USD2022-to-EUR2020 factor is inconsistent.")
+    if not np.allclose(projects["usd2022_to_eur2020"], configured_factor):
+        raise ValueError("RESC A-CAES project table uses a different currency factor.")
+
+    converted_columns = {
+        "capex_eur2020_per_kw": "capex_usd2022_per_kw",
+        "fom_eur2020_per_kw_year": "fom_usd2022_per_kw_year",
+        "vom_eur2020_per_mwh": "vom_usd2022_per_mwh",
+    }
+    for converted, source in converted_columns.items():
+        if not np.allclose(
+            projects[converted],
+            projects[source] * configured_factor,
+            rtol=0,
+            atol=5e-7,
+        ):
+            raise ValueError(f"RESC A-CAES converted column {converted} is inconsistent.")
+
+    lifetime = float(options["lifetime_years"])
+    discount_rate = float(options["discount_rate"])
+    annuity = calculate_annuity(lifetime, discount_rate)
+    nyears = n.snapshot_weightings.generators.sum() / 8760.0
+
+    records = []
+    for site, site_cap_twh in site_output_twh.items():
+        site_cap_mwh = site_cap_twh * 1e6
+        for row in projects.itertuples(index=False):
+            power_mw = float(row.power_mw)
+            duration_hours = float(row.output_duration_hours)
+            maximum_modules = np.floor(
+                site_cap_mwh / (power_mw * duration_hours)
+            )
+            records.append(
+                {
+                    "name": (
+                        f"{site} aCAES RESC {power_mw:g}MW "
+                        f"{duration_hours:g}h"
+                    ),
+                    "bus": site,
+                    "carrier": (
+                        f"aCAES RESC {power_mw:g}MW {duration_hours:g}h"
+                    ),
+                    "power_mw": power_mw,
+                    "duration_hours": duration_hours,
+                    "rated_output_energy_mwh": float(
+                        row.rated_output_energy_mwh_per_module
+                    ),
+                    "p_nom_max": maximum_modules * power_mw,
+                    "max_hours": duration_hours / efficiency_dispatch,
+                    "capital_cost": (
+                        float(row.capex_eur2020_per_kw) * 1e3 * annuity
+                        + float(row.fom_eur2020_per_kw_year) * 1e3
+                    )
+                    * nyears,
+                    "marginal_cost": float(row.vom_eur2020_per_mwh),
+                    "capex_usd2022_per_kw": float(row.capex_usd2022_per_kw),
+                    "capex_eur2020_per_kw": float(row.capex_eur2020_per_kw),
+                    "fom_eur2020_per_kw_year": float(
+                        row.fom_eur2020_per_kw_year
+                    ),
+                }
+            )
+
+    components = pd.DataFrame.from_records(records).set_index("name")
+    add_missing_carriers(n, components["carrier"].unique())
+    n.carriers.loc[components["carrier"].unique(), "co2_emissions"] = 0.0
+
+    n.add(
+        "StorageUnit",
+        components.index,
+        bus=components["bus"],
+        carrier=components["carrier"],
+        p_nom_extendable=True,
+        p_nom_mod=components["power_mw"],
+        p_nom_max=components["p_nom_max"],
+        max_hours=components["max_hours"],
+        efficiency_store=efficiency_store,
+        efficiency_dispatch=efficiency_dispatch,
+        standing_loss=float(options["standing_loss_per_hour"]),
+        cyclic_state_of_charge=bool(options["cyclic_state_of_charge"]),
+        capital_cost=components["capital_cost"],
+        marginal_cost=components["marginal_cost"],
+        lifetime=lifetime,
+        build_year=investment_year,
+    )
+
+    # Persist source-compatible reporting fields and the output-side geology
+    # coefficient. They are not additional investment-cost inputs.
+    n.storage_units.loc[
+        components.index, "acaes_output_duration_hours"
+    ] = components["duration_hours"]
+    n.storage_units.loc[
+        components.index, "acaes_module_power_mw"
+    ] = components["power_mw"]
+    n.storage_units.loc[
+        components.index, "acaes_rated_output_energy_mwh_per_module"
+    ] = components["rated_output_energy_mwh"]
+    n.storage_units.loc[
+        components.index, "acaes_source_capex_usd2022_per_kw"
+    ] = components["capex_usd2022_per_kw"]
+    n.storage_units.loc[
+        components.index, "acaes_model_capex_eur2020_per_kw"
+    ] = components["capex_eur2020_per_kw"]
+    n.storage_units.loc[
+        components.index, "acaes_model_fom_eur2020_per_kw_year"
+    ] = components["fom_eur2020_per_kw_year"]
+
+    logger.info(
+        "Added %d modular RESC A-CAES options at %d German sites with %.3f "
+        "TWh electrical-output geological potential and %.1f%% RTE.",
+        len(projects),
+        len(site_buses),
+        national_output_twh,
+        100 * round_trip_efficiency,
+    )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake

@@ -1707,6 +1707,18 @@ rule prepare_sector_network:
             if config_provider("sector", "district_heating", "ates", "enable")(w)
             else []
         ),
+        acaes_projects=lambda w: (
+            config_provider(
+                "electricity",
+                "storage_options",
+                "aCAES_RESC",
+                "project_options_file",
+            )(w)
+            if config_provider(
+                "electricity", "storage_options", "aCAES_RESC", "enable", default=False
+            )(w)
+            else []
+        ),
     output:
         resources(
             "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc"

@@ -4,16 +4,11 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_nonde_4h_endo2030
+  prefix: caes_resc_modular_fixed_nonde_4h
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BESS_Existing
-  - KN2045_Mix_FixedRenewables_BESS_15GW
-  - KN2045_Mix_FixedRenewables_BESS_25GW
-  - KN2045_Mix_FixedRenewables_BESS_35GW
-  - KN2045_Mix_FixedRenewables_BESS_45GW
-  - KN2045_Mix_FixedRenewables_BESS_55GW
+  - KN2045_Mix_FixedRenewables
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -476,6 +471,7 @@ solving:
       # All controlled 2035 sensitivities share the endogenous reference history through 2030.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
+      - KN2045_Mix_FixedRenewables
       - KN2045_Mix_FixedRenewables_BESS_15GW
       - KN2045_Mix_FixedRenewables_BESS_25GW
       - KN2045_Mix_FixedRenewables_BESS_35GW
@@ -686,6 +682,58 @@ electricity:
   powerplants_filter: (DateOut > 2025 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP") and (DateIn < 2026 or DateIn != DateIn)
   custom_powerplants: true
   custom_file: resources/german_chp.csv
+  storage_options:
+    aCAES_RESC:
+      enable: true
+      countries: [DE]
+      bus_carriers: [AC]
+      first_investment_year: 2035
+
+      # PacifiCorp final 2025 IRP A-CAES technical proxy. Only the round-trip
+      # value is sourced; its symmetric split is an explicit model convention.
+      round_trip_efficiency: 0.63
+      efficiency_split: symmetric
+      charge_to_discharge_power_ratio: 1.0
+      standing_loss_per_hour: 0.0
+      minimum_soc_pu: 0.0
+      cyclic_state_of_charge: true
+      lifetime_years: 30
+      discount_rate: 0.07
+
+      # Each listed duration is rated electrical discharge duration. The
+      # approved set deliberately omits the closely overlapping 10 h option.
+      module_power_mw: [125, 250, 500]
+      output_duration_hours: [8, 12, 16, 24, 48]
+      project_options_file: data/pypsa-de/caes_resc_project_options.csv
+
+      # RESC costs are real USD2022. Conversion first uses the 2022 annual
+      # exchange rate (USD per EUR), then deflates EUR2022 to EUR2020 with
+      # euro-area annual-average HICP changes. No 2035 learning is applied.
+      currency_conversion:
+        usd_per_eur_2022: 1.0534
+        euro_area_hicp_change_2021: 0.026
+        euro_area_hicp_change_2022: 0.084
+        usd2022_to_eur2020: 0.853552115374527
+
+      # InSpEE/InSpEE-DS reports usable electrical discharge/output energy.
+      # Rounded state values (7.7 TWh) are scaled uniformly to the official
+      # German total of 7.6 TWh. No efficiency or minimum-SOC factor is applied.
+      geological_output_capacity_twh: 7.6
+      site_output_capacities_twh:
+        DE2 2: 1.085714285714  # Hamburg / Schleswig-Holstein
+        DE2 3: 1.677922077922  # Berlin / Brandenburg + Mecklenburg-Vorpommern
+        DE2 5: 2.171428571429  # Bremen / Niedersachsen
+        DE2 7: 2.664935064935  # Sachsen-Anhalt + Thueringen
+
+      source_costs: "PacifiCorp 2023 IRP Amended Final, RESC A-CAES project options, real USD2022"
+      source_costs_url: "https://www.pacificorp.com/content/dam/pcorp/documents/en/pacificorp/energy/integrated-resource-plan/2023-irp/2023_IRP_Volume_I.pdf"
+      source_efficiency: "PacifiCorp final 2025 IRP, Appendix C Table C.5, 500 MW / 4000 MWh A-CAES"
+      source_efficiency_url: "https://lf-puc.idaho.gov/WebLink/DocView.aspx?dbid=0&id=145895"
+      source_geology: "BGR InSpEE and InSpEE-DS, 7.6 TWh usable electrical output"
+      source_geology_url: "https://www.bgr.bund.de/DE/Themen/Nutzung-tieferer-Untergrund/Downloads/InSpEE_Abschlussbericht.pdf"
+      source_currency: "Federal Reserve 2022 annual EUR/USD average; ECB/Eurostat euro-area HICP 2021-2022"
+      source_exchange_rate_url: "https://www.federalreserve.gov/releases/g5a/20230109/"
+      source_hicp_url: "https://www.ecb.europa.eu/press/annual-reports-financial-statements/annual/html/ecb.ar2022~8ae51d163b.en.html"
   H2_plants:
     enable: EU # allowed values: false, DE, EU
     start: 2030 # should be < force

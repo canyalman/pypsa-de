@@ -151,6 +151,63 @@ def add_fixed_neighbor_capacity_constraints(
         )
 
 
+def add_acaes_geological_output_constraints(n, options):
+    """Limit modular A-CAES by regional rated electrical output energy."""
+    if not options or not options.get("enable", False):
+        return
+
+    carrier_prefix = "aCAES RESC "
+    acaes_i = n.storage_units.index[
+        n.storage_units.carrier.fillna("").str.startswith(carrier_prefix)
+    ]
+    if acaes_i.empty:
+        raise ValueError("RESC A-CAES is enabled but no modular StorageUnits exist.")
+
+    duration_column = "acaes_output_duration_hours"
+    if duration_column not in n.storage_units.columns:
+        raise ValueError("RESC A-CAES output-duration metadata is missing.")
+
+    site_output_twh = pd.Series(options["site_output_capacities_twh"], dtype=float)
+    national_output_twh = float(options["geological_output_capacity_twh"])
+    if not np.isclose(site_output_twh.sum(), national_output_twh):
+        raise ValueError(
+            "RESC A-CAES regional geological limits do not sum to the national cap."
+        )
+
+    unexpected_buses = pd.Index(n.storage_units.loc[acaes_i, "bus"].unique()).difference(
+        site_output_twh.index
+    )
+    if not unexpected_buses.empty:
+        raise ValueError(
+            "RESC A-CAES StorageUnits exist outside configured geological sites: "
+            + ", ".join(map(str, unexpected_buses))
+        )
+
+    p_nom = n.model["StorageUnit-p_nom"]
+    for site, output_cap_twh in site_output_twh.items():
+        site_i = acaes_i[n.storage_units.loc[acaes_i, "bus"].eq(site).to_numpy()]
+        if site_i.empty:
+            raise ValueError(f"No RESC A-CAES project options were added at {site}.")
+
+        durations = DataArray(
+            n.storage_units.loc[site_i, duration_column].to_numpy(),
+            coords={"name": site_i},
+            dims=("name",),
+        )
+        rated_output_energy = (p_nom.loc[site_i] * durations).sum()
+        n.model.add_constraints(
+            rated_output_energy <= float(output_cap_twh) * 1e6,
+            name=f"StorageUnit-aCAES-geological-output-{site}",
+        )
+
+    logger.info(
+        "Limited modular RESC A-CAES to %.3f TWh rated electrical output "
+        "across %d German sites.",
+        national_output_twh,
+        len(site_output_twh),
+    )
+
+
 def add_capacity_limits(n, investment_year, limits_capacity, sense="maximum"):
     for c in n.iterate_components(limits_capacity):
         logger.info(f"Adding {sense} constraints for {c.list_name}")
@@ -992,6 +1049,16 @@ def additional_functionality(n, snapshots, snakemake):
             fixed_neighbor["domestic_country"],
             fixed_neighbor.get("strict_asset_match", True),
         )
+
+    acaes_options = (
+        snakemake.config.get("electricity", {})
+        .get("storage_options", {})
+        .get("aCAES_RESC", {})
+    )
+    if acaes_options.get("enable", False) and investment_year >= int(
+        acaes_options["first_investment_year"]
+    ):
+        add_acaes_geological_output_constraints(n, acaes_options)
 
     add_power_limits(n, investment_year, constraints["limits_power_max"])
 
