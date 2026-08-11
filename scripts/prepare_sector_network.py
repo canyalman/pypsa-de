@@ -29,6 +29,7 @@ from scripts._helpers import (
     update_config_from_wildcards,
 )
 from scripts.add_electricity import (
+    attach_continuous_acaes,
     attach_storageunits,
     attach_stores,
     calculate_annuity,
@@ -6680,6 +6681,15 @@ if __name__ == "__main__":
         costs=costs,
         buses_i=pop_layout.index,
         extendable_carriers=extendable_stores,
+    )
+
+    attach_continuous_acaes(
+        n=n,
+        buses_i=pop_layout.index,
+        options=snakemake.params.electricity.get("storage_options", {}).get(
+            "aCAES_RESC_continuous", {}
+        ),
+        investment_year=investment_year,
     )
 
     if options["transport"]:

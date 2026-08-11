@@ -1226,6 +1226,253 @@ def attach_stores(
     )
 
 
+def attach_continuous_acaes(
+    n: pypsa.Network,
+    buses_i: pd.Index,
+    options: dict,
+    investment_year: int,
+) -> None:
+    """
+    Attach continuous German A-CAES power and energy investments.
+
+    The source cost fit is expressed in grid-side electrical output power and
+    deliverable electrical output energy. PyPSA's discharger Link and Store use
+    internal-energy units, so their costs and geological limits are converted
+    with discharge efficiency. The associated constraints are added by the
+    custom additional-functionality script.
+    """
+    if not options or not options.get("enable", False):
+        return
+    if investment_year < int(options["first_investment_year"]):
+        return
+
+    required = {
+        "countries",
+        "bus_carriers",
+        "carrier",
+        "round_trip_efficiency",
+        "efficiency_split",
+        "charge_to_discharge_power_ratio",
+        "standing_loss_per_hour",
+        "minimum_soc_pu",
+        "cyclic_state_of_charge",
+        "lifetime_years",
+        "discount_rate",
+        "minimum_output_duration_hours",
+        "maximum_output_duration_hours",
+        "costs",
+        "currency_conversion",
+        "geological_output_capacity_twh",
+        "site_output_capacities_twh",
+    }
+    missing_options = required.difference(options)
+    if missing_options:
+        raise ValueError(
+            "Missing continuous RESC A-CAES options: "
+            + ", ".join(sorted(missing_options))
+        )
+
+    round_trip_efficiency = float(options["round_trip_efficiency"])
+    if not 0 < round_trip_efficiency <= 1:
+        raise ValueError("Continuous A-CAES round-trip efficiency must be in (0, 1].")
+    if options["efficiency_split"] != "symmetric":
+        raise ValueError("Continuous A-CAES requires a symmetric efficiency split.")
+    efficiency_store = efficiency_dispatch = np.sqrt(round_trip_efficiency)
+
+    if not np.isclose(float(options["charge_to_discharge_power_ratio"]), 1.0):
+        raise ValueError(
+            "Continuous A-CAES requires the approved 1:1 grid-side "
+            "charging-to-discharging power ratio."
+        )
+    if not np.isclose(float(options["minimum_soc_pu"]), 0.0):
+        raise ValueError("Continuous A-CAES minimum SOC must be zero.")
+
+    minimum_duration = float(options["minimum_output_duration_hours"])
+    maximum_duration = float(options["maximum_output_duration_hours"])
+    if minimum_duration <= 0 or maximum_duration < minimum_duration:
+        raise ValueError("Continuous A-CAES output-duration bounds are invalid.")
+
+    site_output_twh = pd.Series(options["site_output_capacities_twh"], dtype=float)
+    if site_output_twh.empty or (site_output_twh <= 0).any():
+        raise ValueError("Continuous A-CAES site output capacities must be positive.")
+    national_output_twh = float(options["geological_output_capacity_twh"])
+    if not np.isclose(site_output_twh.sum(), national_output_twh):
+        raise ValueError(
+            "Continuous A-CAES site output capacities must sum to the configured "
+            f"national potential of {national_output_twh} TWh."
+        )
+
+    site_buses = pd.Index(site_output_twh.index)
+    available_buses = pd.Index(buses_i)
+    missing_buses = site_buses.difference(available_buses)
+    if not missing_buses.empty:
+        raise ValueError(
+            "Configured continuous A-CAES sites are not clustered electricity buses: "
+            + ", ".join(map(str, missing_buses))
+        )
+
+    allowed_countries = set(options["countries"])
+    invalid_countries = site_buses[
+        ~n.buses.loc[site_buses, "country"].isin(allowed_countries).to_numpy()
+    ]
+    if not invalid_countries.empty:
+        raise ValueError(
+            "Configured continuous A-CAES sites are outside the allowed countries: "
+            + ", ".join(map(str, invalid_countries))
+        )
+
+    allowed_bus_carriers = set(options["bus_carriers"])
+    invalid_carriers = site_buses[
+        ~n.buses.loc[site_buses, "carrier"].isin(allowed_bus_carriers).to_numpy()
+    ]
+    if not invalid_carriers.empty:
+        raise ValueError(
+            "Configured continuous A-CAES sites do not have an allowed bus carrier: "
+            + ", ".join(map(str, invalid_carriers))
+        )
+
+    costs = options["costs"]
+    required_costs = {
+        "capex_power_usd2022_per_kw",
+        "capex_output_energy_usd2022_per_kwh",
+        "fom_power_usd2022_per_kw_year",
+        "fom_output_energy_usd2022_per_kwh_year",
+        "vom_usd2022_per_mwh_output",
+    }
+    missing_costs = required_costs.difference(costs)
+    if missing_costs:
+        raise ValueError(
+            "Missing continuous RESC A-CAES costs: "
+            + ", ".join(sorted(missing_costs))
+        )
+
+    conversion = options["currency_conversion"]
+    conversion_factor = (
+        1.0
+        / float(conversion["usd_per_eur_2022"])
+        / (1.0 + float(conversion["euro_area_hicp_change_2021"]))
+        / (1.0 + float(conversion["euro_area_hicp_change_2022"]))
+    )
+    configured_factor = float(conversion["usd2022_to_eur2020"])
+    if not np.isclose(conversion_factor, configured_factor, rtol=1e-12):
+        raise ValueError("Configured USD2022-to-EUR2020 factor is inconsistent.")
+
+    lifetime = float(options["lifetime_years"])
+    discount_rate = float(options["discount_rate"])
+    annuity = calculate_annuity(lifetime, discount_rate)
+    nyears = n.snapshot_weightings.generators.sum() / 8760.0
+
+    power_cost = (
+        float(costs["capex_power_usd2022_per_kw"]) * annuity
+        + float(costs["fom_power_usd2022_per_kw_year"])
+    ) * configured_factor
+    output_energy_cost = (
+        float(costs["capex_output_energy_usd2022_per_kwh"]) * annuity
+        + float(costs["fom_output_energy_usd2022_per_kwh_year"])
+    ) * configured_factor
+    output_vom = (
+        float(costs["vom_usd2022_per_mwh_output"]) * configured_factor
+    )
+
+    carrier = str(options["carrier"])
+    charger_carrier = f"{carrier} charge"
+    discharger_carrier = f"{carrier} discharge"
+    add_missing_carriers(n, [carrier, charger_carrier, discharger_carrier])
+    n.carriers.loc[
+        [carrier, charger_carrier, discharger_carrier], "co2_emissions"
+    ] = 0.0
+
+    internal_buses = site_buses + f" {carrier}"
+    charger_names = internal_buses + " charger"
+    discharger_names = internal_buses + " discharger"
+    site_output_mwh = site_output_twh * 1e6
+
+    n.add(
+        "Bus",
+        internal_buses,
+        location=site_buses.to_numpy(),
+        carrier=carrier,
+        country=n.buses.loc[site_buses, "country"].to_numpy(),
+        x=n.buses.loc[site_buses, "x"].to_numpy(),
+        y=n.buses.loc[site_buses, "y"].to_numpy(),
+    )
+    n.add(
+        "Store",
+        internal_buses,
+        bus=internal_buses,
+        carrier=carrier,
+        e_nom_extendable=True,
+        e_nom_max=(site_output_mwh / efficiency_dispatch).to_numpy(),
+        e_min_pu=float(options["minimum_soc_pu"]),
+        e_cyclic=bool(options["cyclic_state_of_charge"]),
+        standing_loss=float(options["standing_loss_per_hour"]),
+        capital_cost=output_energy_cost
+        * 1e3
+        * efficiency_dispatch
+        * nyears,
+        marginal_cost=0.0,
+        lifetime=lifetime,
+        build_year=investment_year,
+    )
+    n.add(
+        "Link",
+        charger_names,
+        bus0=site_buses.to_numpy(),
+        bus1=internal_buses,
+        carrier=charger_carrier,
+        p_nom_extendable=True,
+        efficiency=efficiency_store,
+        capital_cost=power_cost * 1e3 * nyears,
+        marginal_cost=0.0,
+        lifetime=lifetime,
+        build_year=investment_year,
+    )
+    n.add(
+        "Link",
+        discharger_names,
+        bus0=internal_buses,
+        bus1=site_buses.to_numpy(),
+        carrier=discharger_carrier,
+        p_nom_extendable=True,
+        efficiency=efficiency_dispatch,
+        capital_cost=0.0,
+        marginal_cost=output_vom * efficiency_dispatch,
+        lifetime=lifetime,
+        build_year=investment_year,
+    )
+
+    # Reporting metadata follows the source convention. The Store itself is in
+    # internal MWh and is converted to output MWh with efficiency_dispatch.
+    n.stores.loc[internal_buses, "acaes_site"] = site_buses.to_numpy()
+    n.stores.loc[internal_buses, "acaes_output_energy_factor"] = (
+        efficiency_dispatch
+    )
+    n.stores.loc[internal_buses, "acaes_geological_output_capacity_mwh"] = (
+        site_output_mwh.to_numpy()
+    )
+    n.stores.loc[internal_buses, "acaes_minimum_output_duration_hours"] = (
+        minimum_duration
+    )
+    n.stores.loc[internal_buses, "acaes_maximum_output_duration_hours"] = (
+        maximum_duration
+    )
+    n.links.loc[charger_names, "acaes_grid_power_role"] = "charge_input"
+    n.links.loc[discharger_names, "acaes_grid_power_role"] = "discharge_output"
+    n.links.loc[charger_names, "acaes_grid_power_factor"] = 1.0
+    n.links.loc[discharger_names, "acaes_grid_power_factor"] = efficiency_dispatch
+
+    logger.info(
+        "Added continuous RESC A-CAES at %d German sites with %.3f TWh "
+        "electrical-output geological potential, %.1f-%.1f h endogenous output "
+        "duration, and %.1f%% RTE.",
+        len(site_buses),
+        national_output_twh,
+        minimum_duration,
+        maximum_duration,
+        100 * round_trip_efficiency,
+    )
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
