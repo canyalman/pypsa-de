@@ -710,13 +710,13 @@ electricity:
       # The source fixed project intercept is deliberately not retained, so the
       # formulation remains a linear program without integer plant counts.
       # Reported FOM values can be reconstructed as 1.105 MUSD/yr + 7.91 P
-      # + 0.020 E. For the continuous large-scale representation, the fixed
-      # term is spread over the representative 500 MW source class, giving
-      # 7.91 + 1.105e6 / 500e3 = 10.12 USD2022/kW-yr.
+      # + 0.020 E. The continuous LP omits the conditional plant fixed charge;
+      # the no-intercept OLS representation across all 18 source options gives
+      # 10.8566667 USD2022/kW-yr and 0.020 USD2022/kWh-yr.
       costs:
         capex_power_usd2022_per_kw: 1699.0
         capex_output_energy_usd2022_per_kwh: 40.50
-        fom_power_usd2022_per_kw_year: 10.12
+        fom_power_usd2022_per_kw_year: 10.856666666666667
         fom_output_energy_usd2022_per_kwh_year: 0.020
         vom_usd2022_per_mwh_output: 1.05
         capex_fit_sample_size: 18

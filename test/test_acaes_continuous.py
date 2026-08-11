@@ -63,7 +63,7 @@ def test_production_config_uses_approved_continuous_formulation():
     assert options["maximum_output_duration_hours"] == 48
     assert costs["capex_power_usd2022_per_kw"] == 1699.0
     assert costs["capex_output_energy_usd2022_per_kwh"] == 40.50
-    assert costs["fom_power_usd2022_per_kw_year"] == 10.12
+    assert costs["fom_power_usd2022_per_kw_year"] == 10.856666666666667
     assert costs["fom_output_energy_usd2022_per_kwh_year"] == 0.020
     assert costs["vom_usd2022_per_mwh_output"] == 1.05
     assert costs["capex_fit_sample_size"] == 18
