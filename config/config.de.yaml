@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: caes_resc_continuous_fixed_nonde_4h
+  prefix: caes_resc_continuous_fixed_nonde_4h_rte69
   name:
   # - ExPol
   # - KN2045_Mix
@@ -690,10 +690,10 @@ electricity:
       first_investment_year: 2035
       carrier: aCAES RESC continuous
 
-      # PacifiCorp final 2025 IRP A-CAES technical proxy. Only the round-trip
-      # value is sourced; the symmetric split and 1:1 grid-side charge/discharge
-      # power ratio are explicit model conventions.
-      round_trip_efficiency: 0.63
+      # PacifiCorp August 2024 public-input A-CAES technical proxy. Only the
+      # 69% round-trip value is sourced; the symmetric split and 1:1 grid-side
+      # charge/discharge power ratio are explicit model conventions.
+      round_trip_efficiency: 0.69
       efficiency_split: symmetric
       charge_to_discharge_power_ratio: 1.0
       standing_loss_per_hour: 0.0
@@ -746,8 +746,8 @@ electricity:
 
       source_costs: "PacifiCorp 2023 IRP RESC A-CAES project options, real USD2022"
       source_costs_url: "https://www.pacificorp.com/content/dam/pcorp/documents/en/pacificorp/energy/integrated-resource-plan/2023-irp/2023_IRP_Volume_I.pdf"
-      source_efficiency: "PacifiCorp final 2025 IRP, Appendix C Table C.5, 500 MW / 4000 MWh A-CAES"
-      source_efficiency_url: "https://lf-puc.idaho.gov/WebLink/DocView.aspx?dbid=0&id=145895"
+      source_efficiency: "PacifiCorp August 2024 public-input presentation, 500 MW / 4000 MWh A-CAES"
+      source_efficiency_url: "https://www.pacificorp.com/content/dam/pcorp/documents/en/pacificorp/energy/integrated-resource-plan/2025-irp/PacifiCorp_2025_IRP_PIM_August_14-15_2024.pdf"
       source_geology: "BGR InSpEE and InSpEE-DS, 7.6 TWh usable electrical output"
       source_geology_url: "https://www.bgr.bund.de/DE/Themen/Nutzung-tieferer-Untergrund/Downloads/InSpEE_Abschlussbericht.pdf"
       source_currency: "Federal Reserve 2022 annual EUR/USD average; ECB/Eurostat euro-area HICP 2021-2022"

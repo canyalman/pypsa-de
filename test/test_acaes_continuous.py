@@ -56,9 +56,9 @@ def test_production_config_uses_approved_continuous_formulation():
     options = _production_options()
     costs = options["costs"]
 
-    assert config["run"]["prefix"] == "caes_resc_continuous_fixed_nonde_4h"
+    assert config["run"]["prefix"] == "caes_resc_continuous_fixed_nonde_4h_rte69"
     assert config["run"]["name"] == ["KN2045_Mix_FixedRenewables"]
-    assert options["round_trip_efficiency"] == 0.63
+    assert options["round_trip_efficiency"] == 0.69
     assert options["minimum_output_duration_hours"] == 8
     assert options["maximum_output_duration_hours"] == 48
     assert costs["capex_power_usd2022_per_kw"] == 1699.0
@@ -87,7 +87,7 @@ def test_attachment_maps_output_costs_and_geology_to_internal_units():
     stores = n.stores.index[n.stores.carrier.eq(carrier)]
     chargers = n.links.index[n.links.carrier.eq(f"{carrier} charge")]
     dischargers = n.links.index[n.links.carrier.eq(f"{carrier} discharge")]
-    eta = np.sqrt(0.63)
+    eta = np.sqrt(0.69)
 
     assert len(stores) == 4
     assert len(chargers) == 4
@@ -131,7 +131,7 @@ def test_attachment_maps_output_costs_and_geology_to_internal_units():
     )
 
 
-def test_continuous_acaes_delivers_eight_hours_at_63_percent_rte():
+def test_continuous_acaes_delivers_eight_hours_at_69_percent_rte():
     options = copy.deepcopy(_production_options())
     options["geological_output_capacity_twh"] = 0.004
     options["site_output_capacities_twh"] = {"DE test": 0.004}
@@ -173,7 +173,7 @@ def test_continuous_acaes_delivers_eight_hours_at_63_percent_rte():
     store = f"DE test {carrier}"
     charger = f"{store} charger"
     discharger = f"{store} discharger"
-    eta = np.sqrt(0.63)
+    eta = np.sqrt(0.69)
 
     charge_power = n.links.at[charger, "p_nom_opt"]
     output_power = eta * n.links.at[discharger, "p_nom_opt"]
@@ -186,7 +186,7 @@ def test_continuous_acaes_delivers_eight_hours_at_63_percent_rte():
     charge_input = n.links_t.p0[charger].sum()
     discharge_output = -n.links_t.p1[discharger].sum()
     assert np.isclose(discharge_output, 4000.0)
-    assert np.isclose(discharge_output / charge_input, 0.63)
+    assert np.isclose(discharge_output / charge_input, 0.69)
 
     assert "Link-n_mod" not in n.model.variables
     assert "Store-n_mod" not in n.model.variables
