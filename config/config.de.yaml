@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: caes_resc_continuous_fixed_nonde_4h
+  prefix: caes_resc_continuous_fixed_nonde_4h_rte63_1h
   name:
   # - ExPol
   # - KN2045_Mix
@@ -239,7 +239,7 @@ clustering:
     # 'ES': 0.0408
     # 'IT': 0.0408
   temporal:
-    resolution_sector: 3H
+    resolution_sector: 1H
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#co2-budget
 co2_budget:
@@ -457,18 +457,18 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
-    # Fix all non-German capacity variables to the latest endogenous 4h reference.
+    # Fix all non-German capacity variables to the 1h endogenous 4h reference.
     # Dispatch, cross-border flows, and all German endogenous capacity decisions remain free.
     fixed_neighbor_capacities:
       enable: true
       domestic_country: DE
       strict_asset_match: true
-      capacity_manifest: resources/fixed_neighbor_endo_4h_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_endo_4h_1h_capacities.csv
       reference_networks:
-        2025: cluster-results/endo_4h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/endo_4h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/endo_4h_2026-07-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
-      # All controlled 2035 sensitivities share the endogenous reference history through 2030.
+        2025: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+        2030: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+        2035: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+      # Reuse the endogenous reference history through 2030; solve only 2035 anew.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
       - KN2045_Mix_FixedRenewables
@@ -690,9 +690,9 @@ electricity:
       first_investment_year: 2035
       carrier: aCAES RESC continuous
 
-      # PacifiCorp final 2025 IRP A-CAES technical proxy. Only the round-trip
-      # value is sourced; the symmetric split and 1:1 grid-side charge/discharge
-      # power ratio are explicit model conventions.
+      # PacifiCorp final 2025 IRP A-CAES technical proxy. Only the 63%
+      # round-trip value is sourced; the symmetric split and 1:1 grid-side
+      # charge/discharge power ratio are explicit model conventions.
       round_trip_efficiency: 0.63
       efficiency_split: symmetric
       charge_to_discharge_power_ratio: 1.0
@@ -709,6 +709,10 @@ electricity:
       # electrical output power and E is deliverable electrical output energy.
       # The source fixed project intercept is deliberately not retained, so the
       # formulation remains a linear program without integer plant counts.
+      # Reported FOM values can be reconstructed as 1.105 MUSD/yr + 7.91 P
+      # + 0.020 E. The continuous LP omits the conditional plant fixed charge;
+      # the no-intercept OLS representation across all 18 source options gives
+      # 10.8566667 USD2022/kW-yr and 0.020 USD2022/kWh-yr.
       costs:
         capex_power_usd2022_per_kw: 1699.0
         capex_output_energy_usd2022_per_kwh: 40.50

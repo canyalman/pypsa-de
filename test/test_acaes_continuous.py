@@ -56,7 +56,10 @@ def test_production_config_uses_approved_continuous_formulation():
     options = _production_options()
     costs = options["costs"]
 
-    assert config["run"]["prefix"] == "caes_resc_continuous_fixed_nonde_4h"
+    assert (
+        config["run"]["prefix"]
+        == "caes_resc_continuous_fixed_nonde_4h_rte63_1h"
+    )
     assert config["run"]["name"] == ["KN2045_Mix_FixedRenewables"]
     assert options["round_trip_efficiency"] == 0.63
     assert options["minimum_output_duration_hours"] == 8
