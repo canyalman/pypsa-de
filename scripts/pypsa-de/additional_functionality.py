@@ -50,12 +50,68 @@ def _external_asset_index(n, static, bus_columns, domestic_country):
     )
 
 
+def _clip_fixed_neighbor_targets_to_bounds(
+    targets,
+    lower_bounds,
+    upper_bounds,
+    tolerance,
+    component,
+):
+    """Clip only numerically negligible target violations of nominal bounds."""
+    if tolerance < 0:
+        raise ValueError(
+            "Fixed-neighbor bound clipping tolerance must be non-negative."
+        )
+
+    lower_violation = (lower_bounds - targets).where(targets < lower_bounds, 0.0)
+    upper_violation = (targets - upper_bounds).where(targets > upper_bounds, 0.0)
+    violation = pd.concat([lower_violation, upper_violation], axis=1).max(axis=1)
+    excessive = violation.gt(tolerance)
+
+    if excessive.any():
+        examples = []
+        for asset in excessive[excessive].index[:3]:
+            bound = (
+                lower_bounds.at[asset]
+                if lower_violation.at[asset] > 0
+                else upper_bounds.at[asset]
+            )
+            examples.append(
+                f"{asset}: target={targets.at[asset]:.12g}, "
+                f"bound={bound:.12g}, difference={violation.at[asset]:.12g}"
+            )
+        raise ValueError(
+            f"{component}: {int(excessive.sum())} fixed-neighbor targets exceed "
+            f"their nominal bounds by more than the clipping tolerance "
+            f"{tolerance}, e.g. {examples}."
+        )
+
+    clipped = targets.copy()
+    below = lower_violation.gt(0)
+    above = upper_violation.gt(0)
+    clipped.loc[below] = lower_bounds.loc[below]
+    clipped.loc[above] = upper_bounds.loc[above]
+
+    adjusted = below | above
+    if adjusted.any():
+        logger.warning(
+            "Fixed-neighbor %s: clipped %s targets to nominal bounds; "
+            "largest numerical adjustment %.12g.",
+            component,
+            int(adjusted.sum()),
+            violation.loc[adjusted].max(),
+        )
+
+    return clipped
+
+
 def add_fixed_neighbor_capacity_constraints(
     n,
     investment_year,
     manifest_path,
     domestic_country,
     strict_asset_match=True,
+    bound_clip_tolerance=0.01,
 ):
     """Fix non-domestic nominal capacities to a solved reference network."""
     manifest = pd.read_csv(manifest_path, dtype={"asset": str})
@@ -66,9 +122,11 @@ def add_fixed_neighbor_capacity_constraints(
             f"{manifest_path}."
         )
 
-    for component, (list_name, nominal_attr, bus_columns) in (
-        FIXED_NEIGHBOR_COMPONENTS.items()
-    ):
+    for component, (
+        list_name,
+        nominal_attr,
+        bus_columns,
+    ) in FIXED_NEIGHBOR_COMPONENTS.items():
         component_targets = targets.loc[targets["component"].eq(component)].copy()
         if component_targets.empty:
             continue
@@ -131,9 +189,30 @@ def add_fixed_neighbor_capacity_constraints(
             )
             continue
 
+        target_nominal = component_targets.loc[extendable, "nominal"].astype(float)
+        lower_column = f"{nominal_attr}_nom_min"
+        upper_column = f"{nominal_attr}_nom_max"
+        lower_bounds = (
+            static.loc[extendable, lower_column].astype(float).fillna(-np.inf)
+            if lower_column in static
+            else pd.Series(-np.inf, index=extendable, dtype=float)
+        )
+        upper_bounds = (
+            static.loc[extendable, upper_column].astype(float).fillna(np.inf)
+            if upper_column in static
+            else pd.Series(np.inf, index=extendable, dtype=float)
+        )
+        target_nominal = _clip_fixed_neighbor_targets_to_bounds(
+            target_nominal,
+            lower_bounds,
+            upper_bounds,
+            bound_clip_tolerance,
+            component,
+        )
+
         nominal = n.model[f"{component}-{nominal_attr}_nom"].loc[extendable]
         rhs = DataArray(
-            component_targets.loc[extendable, "nominal"].to_numpy(),
+            target_nominal.to_numpy(),
             coords={"name": extendable},
             dims=("name",),
         )
@@ -990,7 +1069,8 @@ def additional_functionality(n, snapshots, snakemake):
             investment_year,
             Path(snakemake.input.fixed_neighbor_capacities),
             fixed_neighbor["domestic_country"],
-            fixed_neighbor.get("strict_asset_match", True),
+            strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
+            bound_clip_tolerance=fixed_neighbor.get("bound_clip_tolerance", 0.01),
         )
 
     add_power_limits(n, investment_year, constraints["limits_power_max"])

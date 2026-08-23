@@ -466,6 +466,8 @@ solving:
       enable: true
       domestic_country: DE
       strict_asset_match: true
+      # Clip only numerical bound violations up to 0.01 nominal units.
+      bound_clip_tolerance: 0.01
       capacity_manifest: resources/fixed_neighbor_endo_4h_1h_capacities.csv
       reference_networks:
         2025: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
