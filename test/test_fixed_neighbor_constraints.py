@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Focused tests for fixed-neighbor numerical bound handling."""
+"""Focused tests for fixed-neighbor numerical bound relaxation."""
 
 import importlib.util
 import sys
@@ -37,7 +37,10 @@ finally:
         sys.modules[PREPARE_SECTOR_NETWORK] = ORIGINAL_PREPARE_SECTOR_NETWORK
 
 
-def build_generator_model():
+def build_generator_model(
+    p_nom_min=0.0,
+    p_nom_max=152.9999821847514,
+):
     n = pypsa.Network()
     n.add("Bus", "DE bus", country="DE")
     n.add("Bus", "BE bus", country="BE")
@@ -46,8 +49,8 @@ def build_generator_model():
         "BE2 0 0 onwind-2035",
         bus="BE bus",
         p_nom_extendable=True,
-        p_nom_min=0.0,
-        p_nom_max=152.9999821847514,
+        p_nom_min=p_nom_min,
+        p_nom_max=p_nom_max,
         capital_cost=1.0,
     )
     n.set_snapshots([0])
@@ -63,11 +66,13 @@ def write_manifest(path, nominal):
     )
 
 
-def test_clips_small_fixed_neighbor_upper_bound_violation(tmp_path, caplog):
+def test_relaxes_small_upper_bound_without_changing_reference_target(
+    tmp_path, caplog
+):
     asset = "BE2 0 0 onwind-2035"
-    upper_bound = 152.9999821847514
+    reference_target = 153.0012777901072
     manifest = tmp_path / "manifest.csv"
-    write_manifest(manifest, 153.0012777901072)
+    write_manifest(manifest, reference_target)
     n = build_generator_model()
 
     MODULE.add_fixed_neighbor_capacity_constraints(
@@ -75,12 +80,39 @@ def test_clips_small_fixed_neighbor_upper_bound_violation(tmp_path, caplog):
         investment_year=2035,
         manifest_path=manifest,
         domestic_country="DE",
-        bound_clip_tolerance=0.01,
+        bound_relax_tolerance=0.01,
     )
 
-    constraint = n.model.constraints["FixedNeighbor-Generator-p_nom"]
-    assert constraint.rhs.to_pandas().at[asset] == upper_bound
+    fixed = n.model.constraints["FixedNeighbor-Generator-p_nom"]
+    upper = n.model.constraints["Generator-ext-p_nom-upper"]
+    assert fixed.rhs.to_pandas().at[asset] == reference_target
+    assert upper.rhs.to_pandas().at[asset] == reference_target
     assert "delta=0.001295605" in caplog.text
+
+    status, condition = n.model.solve(solver_name="highs")
+    assert status == "ok"
+    assert condition == "optimal"
+
+
+def test_relaxes_small_lower_bound_without_changing_reference_target(tmp_path):
+    asset = "BE2 0 0 onwind-2035"
+    reference_target = 0.999
+    manifest = tmp_path / "manifest.csv"
+    write_manifest(manifest, reference_target)
+    n = build_generator_model(p_nom_min=1.0, p_nom_max=10.0)
+
+    MODULE.add_fixed_neighbor_capacity_constraints(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        bound_relax_tolerance=0.01,
+    )
+
+    fixed = n.model.constraints["FixedNeighbor-Generator-p_nom"]
+    lower = n.model.constraints["Generator-ext-p_nom-lower"]
+    assert fixed.rhs.to_pandas().at[asset] == reference_target
+    assert lower.rhs.to_pandas().at[asset] == reference_target
 
 
 def test_rejects_large_fixed_neighbor_bound_violation(tmp_path):
@@ -94,7 +126,7 @@ def test_rejects_large_fixed_neighbor_bound_violation(tmp_path):
             investment_year=2035,
             manifest_path=manifest,
             domestic_country="DE",
-            bound_clip_tolerance=0.01,
+            bound_relax_tolerance=0.01,
         )
 
     assert "FixedNeighbor-Generator-p_nom" not in n.model.constraints
@@ -140,9 +172,9 @@ def write_relation_manifest(path, second_nominal):
     )
 
 
-def test_masks_small_fully_fixed_capacity_relation_residual(tmp_path, caplog):
+def test_does_not_mask_other_capacity_relations(tmp_path):
     manifest = tmp_path / "manifest.csv"
-    write_relation_manifest(manifest, 1.00002)
+    write_relation_manifest(manifest, 1.000000000001)
     n = build_two_generator_relation_model()
 
     MODULE.add_fixed_neighbor_capacity_constraints(
@@ -150,28 +182,8 @@ def test_masks_small_fully_fixed_capacity_relation_residual(tmp_path, caplog):
         investment_year=2035,
         manifest_path=manifest,
         domestic_country="DE",
-        bound_clip_tolerance=0.01,
+        bound_relax_tolerance=0.01,
     )
-
-    constraint = n.model.constraints["test-fixed-capacity-relation"]
-    assert constraint.labels.item() == -1
-    assert "test-fixed-capacity-relation" in caplog.text
-    assert "delta=1.999999" in caplog.text
-
-
-def test_rejects_large_fully_fixed_capacity_relation_residual(tmp_path):
-    manifest = tmp_path / "manifest.csv"
-    write_relation_manifest(manifest, 1.02)
-    n = build_two_generator_relation_model()
-
-    with pytest.raises(ValueError, match="fully fixed capacity constraint residuals"):
-        MODULE.add_fixed_neighbor_capacity_constraints(
-            n,
-            investment_year=2035,
-            manifest_path=manifest,
-            domestic_country="DE",
-            bound_clip_tolerance=0.01,
-        )
 
     constraint = n.model.constraints["test-fixed-capacity-relation"]
     assert constraint.labels.item() >= 0
