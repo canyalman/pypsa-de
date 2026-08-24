@@ -149,61 +149,17 @@ def _fixed_neighbor_bound_violations(
     )
 
 
-def _assign_indexed_values(array, values):
-    """Assign a Series to a one-dimensional xarray model array."""
-    if values.empty:
-        return
-    if len(array.dims) != 1:
-        raise ValueError("Expected a one-dimensional Linopy/xarray value array.")
-    array.loc[{array.dims[0]: values.index}] = values.to_numpy()
-
-
-def _relax_nominal_bound_sources(context, targets):
-    """Expand only the bound sources that exclude solved reference targets."""
-    variable = context["variable"]
-
-    variable_lower = _indexed_values(
-        variable.lower, targets.index, f"{context['variable_name']}.lower"
-    ).fillna(-np.inf)
-    below = targets.lt(variable_lower)
-    _assign_indexed_values(variable.data["lower"], targets.loc[below])
-
-    variable_upper = _indexed_values(
-        variable.upper, targets.index, f"{context['variable_name']}.upper"
-    ).fillna(np.inf)
-    above = targets.gt(variable_upper)
-    _assign_indexed_values(variable.data["upper"], targets.loc[above])
-
-    for side, comparison in (
-        ("lower", lambda target, bound: target < bound),
-        ("upper", lambda target, bound: target > bound),
-    ):
-        constraint = context["bound_constraints"].get(side)
-        if constraint is None:
-            continue
-        rhs = constraint.rhs.to_pandas()
-        common = targets.index.intersection(rhs.index)
-        if common.empty:
-            continue
-        update = comparison(targets.loc[common], rhs.loc[common])
-        _assign_indexed_values(
-            constraint.data["rhs"], targets.loc[common[update.to_numpy()]]
-        )
-
-
 def add_fixed_neighbor_capacity_constraints(
     n,
     investment_year,
     manifest_path,
     domestic_country,
     strict_asset_match=True,
-    bound_relax_tolerance=0.01,
+    capacity_tolerance=0.01,
 ):
-    """Fix non-domestic nominal capacities to a solved reference network."""
-    if bound_relax_tolerance < 0:
-        raise ValueError(
-            "Fixed-neighbor bound relaxation tolerance must be non-negative."
-        )
+    """Fix non-domestic nominal capacities within a narrow reference band."""
+    if capacity_tolerance < 0:
+        raise ValueError("Fixed-neighbor capacity tolerance must be non-negative.")
 
     manifest = pd.read_csv(manifest_path, dtype={"asset": str})
     targets = manifest.loc[manifest["year"].eq(investment_year)].copy()
@@ -296,13 +252,40 @@ def add_fixed_neighbor_capacity_constraints(
                 bound_context["variable_name"],
             )
         )
+        target_tolerance = pd.Series(capacity_tolerance, index=extendable)
+        effective_lower = pd.concat(
+            [target_nominal - target_tolerance, bound_context["lower"]], axis=1
+        ).max(axis=1)
+        effective_upper = pd.concat(
+            [target_nominal + target_tolerance, bound_context["upper"]], axis=1
+        ).min(axis=1)
+        no_overlap = effective_lower.gt(effective_upper)
+        if no_overlap.any():
+            invalid = extendable[no_overlap.to_numpy()]
+            details = pd.DataFrame(
+                {
+                    "component": component,
+                    "asset": invalid,
+                    "variable": bound_context["variable_name"],
+                    "reference_value": target_nominal.loc[invalid].to_numpy(),
+                    "lower_bound": bound_context["lower"].loc[invalid].to_numpy(),
+                    "upper_bound": bound_context["upper"].loc[invalid].to_numpy(),
+                    "allowed_tolerance": target_tolerance.loc[invalid].to_numpy(),
+                }
+            ).to_string(index=False)
+            raise ValueError(
+                "Fixed-neighbor reference bands do not intersect the Linopy "
+                f"nominal bounds for {len(invalid)} targets:\n{details}"
+            )
+
         pending_constraints.append(
             (
                 component,
                 nominal_attr,
                 extendable,
-                target_nominal,
                 bound_context,
+                effective_lower,
+                effective_upper,
             )
         )
         validated_targets += len(extendable)
@@ -327,45 +310,37 @@ def add_fixed_neighbor_capacity_constraints(
                 row.delta,
             )
 
-        excessive = bound_report["delta"].gt(bound_relax_tolerance)
-        if excessive.any():
-            columns = [
-                "component",
-                "asset",
-                "variable",
-                "reference_value",
-                "lower_bound",
-                "upper_bound",
-                "delta",
-            ]
-            details = bound_report.loc[excessive, columns].to_string(index=False)
-            raise ValueError(
-                f"{int(excessive.sum())} fixed-neighbor targets exceed their "
-                f"Linopy nominal bounds by more than {bound_relax_tolerance}:\n"
-                f"{details}"
-            )
-
     for (
         component,
         nominal_attr,
         extendable,
-        target_nominal,
         bound_context,
+        effective_lower,
+        effective_upper,
     ) in pending_constraints:
-        _relax_nominal_bound_sources(bound_context, target_nominal)
         nominal = n.model[bound_context["variable_name"]].loc[extendable]
         dimension = nominal.dims[0]
-        rhs = DataArray(
-            target_nominal.to_numpy(),
+        lower_rhs = DataArray(
+            effective_lower.to_numpy(),
+            coords={dimension: extendable},
+            dims=(dimension,),
+        )
+        upper_rhs = DataArray(
+            effective_upper.to_numpy(),
             coords={dimension: extendable},
             dims=(dimension,),
         )
         n.model.add_constraints(
-            nominal == rhs,
-            name=f"FixedNeighbor-{component}-{nominal_attr}_nom",
+            nominal >= lower_rhs,
+            name=f"FixedNeighbor-{component}-{nominal_attr}_nom-lower",
+        )
+        n.model.add_constraints(
+            nominal <= upper_rhs,
+            name=f"FixedNeighbor-{component}-{nominal_attr}_nom-upper",
         )
         logger.info(
-            "Fixed-neighbor %s: constrained %s non-%s %s_nom capacities in %s.",
+            "Fixed-neighbor %s: constrained %s non-%s %s_nom capacities to "
+            "narrow reference bands in %s.",
             component,
             len(extendable),
             domestic_country,
@@ -375,12 +350,12 @@ def add_fixed_neighbor_capacity_constraints(
 
     logger.info(
         "Fixed-neighbor pre-solve validation passed for %s targets in %s; "
-        "relaxed %s numerical bound conflicts with tolerance %.12g without "
-        "changing reference targets.",
+        "%s reference targets lie just outside their original nominal bounds. "
+        "Capacity bands use tolerance %.12g nominal units.",
         validated_targets,
         investment_year,
         len(bound_report),
-        bound_relax_tolerance,
+        capacity_tolerance,
     )
 
 
@@ -1224,7 +1199,7 @@ def additional_functionality(n, snapshots, snakemake):
             Path(snakemake.input.fixed_neighbor_capacities),
             fixed_neighbor["domestic_country"],
             strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
-            bound_relax_tolerance=fixed_neighbor.get("bound_relax_tolerance", 0.01),
+            capacity_tolerance=fixed_neighbor.get("capacity_tolerance", 0.01),
         )
 
     add_power_limits(n, investment_year, constraints["limits_power_max"])
