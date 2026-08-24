@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Focused tests for fixed-neighbor numerical bound relaxation."""
+"""Focused tests for tolerance-aware fixed-neighbor capacity bands."""
 
 import importlib.util
 import sys
@@ -40,6 +40,7 @@ finally:
 def build_generator_model(
     p_nom_min=0.0,
     p_nom_max=152.9999821847514,
+    demand=0.0,
 ):
     n = pypsa.Network()
     n.add("Bus", "DE bus", country="DE")
@@ -53,6 +54,8 @@ def build_generator_model(
         p_nom_max=p_nom_max,
         capital_cost=1.0,
     )
+    if demand:
+        n.add("Load", "BE load", bus="BE bus", p_set=demand)
     n.set_snapshots([0])
     n.optimize.create_model()
     return n
@@ -66,7 +69,7 @@ def write_manifest(path, nominal):
     )
 
 
-def test_relaxes_small_upper_bound_without_changing_reference_target(
+def test_small_upper_bound_mismatch_uses_intersecting_reference_band(
     tmp_path, caplog
 ):
     asset = "BE2 0 0 onwind-2035"
@@ -80,13 +83,20 @@ def test_relaxes_small_upper_bound_without_changing_reference_target(
         investment_year=2035,
         manifest_path=manifest,
         domestic_country="DE",
-        bound_relax_tolerance=0.01,
+        capacity_tolerance=0.01,
     )
 
-    fixed = n.model.constraints["FixedNeighbor-Generator-p_nom"]
+    fixed_lower = n.model.constraints["FixedNeighbor-Generator-p_nom-lower"]
+    fixed_upper = n.model.constraints["FixedNeighbor-Generator-p_nom-upper"]
     upper = n.model.constraints["Generator-ext-p_nom-upper"]
-    assert fixed.rhs.to_pandas().at[asset] == reference_target
-    assert upper.rhs.to_pandas().at[asset] == reference_target
+    expected_tolerance = 0.01
+    assert fixed_lower.rhs.to_pandas().at[asset] == pytest.approx(
+        reference_target - expected_tolerance
+    )
+    assert fixed_upper.rhs.to_pandas().at[asset] == pytest.approx(
+        152.9999821847514
+    )
+    assert upper.rhs.to_pandas().at[asset] == 152.9999821847514
     assert "delta=0.001295605" in caplog.text
 
     status, condition = n.model.solve(solver_name="highs")
@@ -94,7 +104,7 @@ def test_relaxes_small_upper_bound_without_changing_reference_target(
     assert condition == "optimal"
 
 
-def test_relaxes_small_lower_bound_without_changing_reference_target(tmp_path):
+def test_small_lower_bound_mismatch_uses_intersecting_reference_band(tmp_path):
     asset = "BE2 0 0 onwind-2035"
     reference_target = 0.999
     manifest = tmp_path / "manifest.csv"
@@ -106,30 +116,76 @@ def test_relaxes_small_lower_bound_without_changing_reference_target(tmp_path):
         investment_year=2035,
         manifest_path=manifest,
         domestic_country="DE",
-        bound_relax_tolerance=0.01,
+        capacity_tolerance=0.01,
     )
 
-    fixed = n.model.constraints["FixedNeighbor-Generator-p_nom"]
+    fixed_lower = n.model.constraints["FixedNeighbor-Generator-p_nom-lower"]
+    fixed_upper = n.model.constraints["FixedNeighbor-Generator-p_nom-upper"]
     lower = n.model.constraints["Generator-ext-p_nom-lower"]
-    assert fixed.rhs.to_pandas().at[asset] == reference_target
-    assert lower.rhs.to_pandas().at[asset] == reference_target
+    assert fixed_lower.rhs.to_pandas().at[asset] == 1.0
+    assert fixed_upper.rhs.to_pandas().at[asset] == pytest.approx(1.009)
+    assert lower.rhs.to_pandas().at[asset] == 1.0
 
 
-def test_rejects_large_fixed_neighbor_bound_violation(tmp_path):
+def test_rejects_reference_band_without_bound_overlap(tmp_path):
     manifest = tmp_path / "manifest.csv"
     write_manifest(manifest, 153.02)
     n = build_generator_model()
 
-    with pytest.raises(ValueError, match="exceed their Linopy nominal bounds"):
+    with pytest.raises(ValueError, match="reference bands do not intersect"):
         MODULE.add_fixed_neighbor_capacity_constraints(
             n,
             investment_year=2035,
             manifest_path=manifest,
             domestic_country="DE",
-            bound_relax_tolerance=0.01,
+            capacity_tolerance=0.01,
         )
 
-    assert "FixedNeighbor-Generator-p_nom" not in n.model.constraints
+    assert "FixedNeighbor-Generator-p_nom-lower" not in n.model.constraints
+    assert "FixedNeighbor-Generator-p_nom-upper" not in n.model.constraints
+
+
+def test_tolerance_does_not_scale_with_large_reference_capacity(tmp_path):
+    asset = "BE2 0 0 onwind-2035"
+    reference_target = 42000.0
+    manifest = tmp_path / "manifest.csv"
+    write_manifest(manifest, reference_target)
+    n = build_generator_model(p_nom_max=50000.0)
+
+    MODULE.add_fixed_neighbor_capacity_constraints(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.01,
+    )
+
+    fixed_lower = n.model.constraints["FixedNeighbor-Generator-p_nom-lower"]
+    fixed_upper = n.model.constraints["FixedNeighbor-Generator-p_nom-upper"]
+    assert fixed_lower.rhs.to_pandas().at[asset] == pytest.approx(41999.99)
+    assert fixed_upper.rhs.to_pandas().at[asset] == pytest.approx(42000.01)
+
+
+def test_narrow_band_absorbs_tiny_reference_dispatch_residual(tmp_path):
+    asset = "BE2 0 0 onwind-2035"
+    manifest = tmp_path / "manifest.csv"
+    write_manifest(manifest, 0.0)
+    n = build_generator_model(p_nom_max=10.0, demand=0.005)
+
+    MODULE.add_fixed_neighbor_capacity_constraints(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.01,
+    )
+
+    status, condition = n.model.solve(solver_name="highs")
+    assert status == "ok"
+    assert condition == "optimal"
+    assert n.model.solution["Generator-p_nom"].to_pandas().at[asset] == pytest.approx(
+        0.005
+    )
 
 
 def test_all_fixed_neighbor_nominal_component_groups_are_covered():
@@ -182,8 +238,12 @@ def test_does_not_mask_other_capacity_relations(tmp_path):
         investment_year=2035,
         manifest_path=manifest,
         domestic_country="DE",
-        bound_relax_tolerance=0.01,
+        capacity_tolerance=0.01,
     )
 
     constraint = n.model.constraints["test-fixed-capacity-relation"]
     assert constraint.labels.item() >= 0
+
+    status, condition = n.model.solve(solver_name="highs")
+    assert status == "ok"
+    assert condition == "optimal"
