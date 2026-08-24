@@ -65,14 +65,15 @@ def _indexed_values(array, assets, label):
     return values.reindex(assets).astype(float)
 
 
-def _model_nominal_bounds(n, component, nominal_attr, assets):
-    """Read effective nominal bounds from the built Linopy model."""
+def _model_nominal_bound_context(n, component, nominal_attr, assets):
+    """Return effective Linopy nominal bounds and their model sources."""
     variable_name = f"{component}-{nominal_attr}_nom"
     variable = n.model[variable_name]
     lower = _indexed_values(variable.lower, assets, f"{variable_name}.lower")
     upper = _indexed_values(variable.upper, assets, f"{variable_name}.upper")
     lower = lower.fillna(-np.inf)
     upper = upper.fillna(np.inf)
+    bound_constraints = {}
 
     # PyPSA 1.x represents nominal min/max mostly as constraints rather than
     # finite Variable.lower/upper values. Include their actual model RHS here.
@@ -98,12 +99,19 @@ def _model_nominal_bounds(n, component, nominal_attr, assets):
             )
 
         constraint_bound = rhs.reindex(common).astype(float)
+        bound_constraints[side] = constraint
         if side == "lower":
             lower.loc[common] = np.maximum(lower.loc[common], constraint_bound)
         else:
             upper.loc[common] = np.minimum(upper.loc[common], constraint_bound)
 
-    return lower, upper, variable_name
+    return {
+        "variable_name": variable_name,
+        "variable": variable,
+        "lower": lower,
+        "upper": upper,
+        "bound_constraints": bound_constraints,
+    }
 
 
 def _fixed_neighbor_bound_violations(
@@ -141,132 +149,46 @@ def _fixed_neighbor_bound_violations(
     )
 
 
-def _constraint_coordinate(rhs, position):
-    """Format one constraint-row coordinate for diagnostics."""
-    if not rhs.dims:
-        return "scalar"
-
-    labels = []
-    for dimension, offset in zip(rhs.dims, position):
-        value = (
-            rhs.coords[dimension].values[offset]
-            if dimension in rhs.coords
-            else offset
-        )
-        labels.append(f"{dimension}={value}")
-    return ", ".join(labels)
+def _assign_indexed_values(array, values):
+    """Assign a Series to a one-dimensional xarray model array."""
+    if values.empty:
+        return
+    if len(array.dims) != 1:
+        raise ValueError("Expected a one-dimensional Linopy/xarray value array.")
+    array.loc[{array.dims[0]: values.index}] = values.to_numpy()
 
 
-def _audit_fully_fixed_capacity_constraints(n, fixed_values, tolerance):
-    """
-    Validate constraints whose variables are all fixed-neighbor capacities.
+def _relax_nominal_bound_sources(context, targets):
+    """Expand only the bound sources that exclude solved reference targets."""
+    variable = context["variable"]
 
-    Small residuals are numerical remnants of the solved reference portfolio.
-    Such constraint rows are redundant once every variable in the row is fixed
-    individually, so only those rows are masked. Constraints containing any
-    free variable remain untouched.
-    """
-    if fixed_values.empty:
-        return pd.DataFrame()
+    variable_lower = _indexed_values(
+        variable.lower, targets.index, f"{context['variable_name']}.lower"
+    ).fillna(-np.inf)
+    below = targets.lt(variable_lower)
+    _assign_indexed_values(variable.data["lower"], targets.loc[below])
 
-    fixed_labels = fixed_values.index.to_numpy(dtype=int)
-    reports = []
-    pending_masks = []
+    variable_upper = _indexed_values(
+        variable.upper, targets.index, f"{context['variable_name']}.upper"
+    ).fillna(np.inf)
+    above = targets.gt(variable_upper)
+    _assign_indexed_values(variable.data["upper"], targets.loc[above])
 
-    for constraint_name in n.model.constraints:
-        constraint = n.model.constraints[constraint_name]
-        if any("snapshot" in dimension.lower() for dimension in constraint.rhs.dims):
+    for side, comparison in (
+        ("lower", lambda target, bound: target < bound),
+        ("upper", lambda target, bound: target > bound),
+    ):
+        constraint = context["bound_constraints"].get(side)
+        if constraint is None:
             continue
-
-        variable_labels = constraint.vars.to_numpy()
-        coefficients = constraint.coeffs.to_numpy()
-        if variable_labels.ndim == 0:
+        rhs = constraint.rhs.to_pandas()
+        common = targets.index.intersection(rhs.index)
+        if common.empty:
             continue
-
-        used = variable_labels >= 0
-        is_fixed = np.isin(variable_labels, fixed_labels)
-        fully_fixed = used.any(axis=-1) & np.all(~used | is_fixed, axis=-1)
-        if not fully_fixed.any():
-            continue
-
-        substituted = fixed_values.reindex(variable_labels.ravel()).to_numpy()
-        substituted = np.nan_to_num(
-            substituted.reshape(variable_labels.shape), nan=0.0
+        update = comparison(targets.loc[common], rhs.loc[common])
+        _assign_indexed_values(
+            constraint.data["rhs"], targets.loc[common[update.to_numpy()]]
         )
-        lhs = np.sum(
-            np.where(used, coefficients * substituted, 0.0),
-            axis=-1,
-        )
-        rhs = constraint.rhs.to_numpy()
-        sign = constraint.sign.to_numpy()
-        delta = np.zeros_like(rhs, dtype=float)
-        delta = np.where(sign == "=", np.abs(lhs - rhs), delta)
-        delta = np.where(sign == "<=", np.maximum(lhs - rhs, 0.0), delta)
-        delta = np.where(sign == ">=", np.maximum(rhs - lhs, 0.0), delta)
-        violated = fully_fixed & (delta > 0)
-        if not violated.any():
-            continue
-
-        for position in np.argwhere(violated):
-            position = tuple(position)
-            reports.append(
-                {
-                    "constraint": constraint_name,
-                    "coordinate": _constraint_coordinate(constraint.rhs, position),
-                    "lhs": float(lhs[position]),
-                    "sign": str(sign[position]),
-                    "rhs": float(rhs[position]),
-                    "delta": float(delta[position]),
-                }
-            )
-        pending_masks.append((constraint_name, violated))
-
-    report = pd.DataFrame(reports)
-    if report.empty:
-        logger.info(
-            "Fixed-neighbor pre-solve relation audit found no conflicting "
-            "fully fixed capacity constraints."
-        )
-        return report
-
-    for row in report.itertuples(index=False):
-        logger.warning(
-            "Fixed-neighbor pre-solve relation violation: constraint=%s, "
-            "coordinate=%s, lhs=%.12g, sign=%s, rhs=%.12g, delta=%.12g.",
-            row.constraint,
-            row.coordinate,
-            row.lhs,
-            row.sign,
-            row.rhs,
-            row.delta,
-        )
-
-    excessive = report["delta"].gt(tolerance)
-    if excessive.any():
-        details = report.loc[
-            excessive, ["constraint", "coordinate", "lhs", "sign", "rhs", "delta"]
-        ].to_string(index=False)
-        raise ValueError(
-            f"{int(excessive.sum())} fully fixed capacity constraint residuals "
-            f"exceed {tolerance}:\n{details}"
-        )
-
-    for constraint_name, violated in pending_masks:
-        constraint = n.model.constraints[constraint_name]
-        mask = DataArray(
-            violated,
-            coords=constraint.labels.coords,
-            dims=constraint.labels.dims,
-        )
-        constraint.data["labels"] = constraint.labels.where(~mask, -1)
-
-    logger.warning(
-        "Fixed-neighbor pre-solve relation audit masked %s redundant constraint "
-        "rows with residuals at or below %.12g.",
-        len(report),
-        tolerance,
-    )
-    return report
 
 
 def add_fixed_neighbor_capacity_constraints(
@@ -275,12 +197,12 @@ def add_fixed_neighbor_capacity_constraints(
     manifest_path,
     domestic_country,
     strict_asset_match=True,
-    bound_clip_tolerance=0.01,
+    bound_relax_tolerance=0.01,
 ):
     """Fix non-domestic nominal capacities to a solved reference network."""
-    if bound_clip_tolerance < 0:
+    if bound_relax_tolerance < 0:
         raise ValueError(
-            "Fixed-neighbor bound clipping tolerance must be non-negative."
+            "Fixed-neighbor bound relaxation tolerance must be non-negative."
         )
 
     manifest = pd.read_csv(manifest_path, dtype={"asset": str})
@@ -362,16 +284,16 @@ def add_fixed_neighbor_capacity_constraints(
             continue
 
         target_nominal = component_targets.loc[extendable, "nominal"].astype(float)
-        lower_bounds, upper_bounds, variable_name = _model_nominal_bounds(
+        bound_context = _model_nominal_bound_context(
             n, component, nominal_attr, extendable
         )
         bound_reports.append(
             _fixed_neighbor_bound_violations(
                 target_nominal,
-                lower_bounds,
-                upper_bounds,
+                bound_context["lower"],
+                bound_context["upper"],
                 component,
-                variable_name,
+                bound_context["variable_name"],
             )
         )
         pending_constraints.append(
@@ -380,9 +302,7 @@ def add_fixed_neighbor_capacity_constraints(
                 nominal_attr,
                 extendable,
                 target_nominal,
-                lower_bounds,
-                upper_bounds,
-                variable_name,
+                bound_context,
             )
         )
         validated_targets += len(extendable)
@@ -407,7 +327,7 @@ def add_fixed_neighbor_capacity_constraints(
                 row.delta,
             )
 
-        excessive = bound_report["delta"].gt(bound_clip_tolerance)
+        excessive = bound_report["delta"].gt(bound_relax_tolerance)
         if excessive.any():
             columns = [
                 "component",
@@ -421,55 +341,19 @@ def add_fixed_neighbor_capacity_constraints(
             details = bound_report.loc[excessive, columns].to_string(index=False)
             raise ValueError(
                 f"{int(excessive.sum())} fixed-neighbor targets exceed their "
-                f"Linopy nominal bounds by more than {bound_clip_tolerance}:\n"
+                f"Linopy nominal bounds by more than {bound_relax_tolerance}:\n"
                 f"{details}"
             )
 
-    prepared_constraints = []
-    fixed_value_parts = []
     for (
         component,
         nominal_attr,
         extendable,
         target_nominal,
-        lower_bounds,
-        upper_bounds,
-        variable_name,
+        bound_context,
     ) in pending_constraints:
-        target_nominal = target_nominal.clip(lower=lower_bounds, upper=upper_bounds)
-        variable = n.model[variable_name]
-        variable_labels = variable.labels.to_pandas()
-        missing_labels = extendable.difference(variable_labels.index)
-        if not missing_labels.empty:
-            raise ValueError(
-                f"{variable_name}.labels is missing {len(missing_labels)} "
-                f"fixed-neighbor assets, e.g. {missing_labels[:3].tolist()}."
-            )
-        labels = variable_labels.reindex(extendable).astype(int)
-        fixed_value_parts.append(
-            pd.Series(target_nominal.to_numpy(), index=labels.to_numpy())
-        )
-        prepared_constraints.append(
-            (component, nominal_attr, extendable, target_nominal, variable_name)
-        )
-
-    fixed_values = (
-        pd.concat(fixed_value_parts) if fixed_value_parts else pd.Series(dtype=float)
-    )
-    if fixed_values.index.duplicated().any():
-        raise ValueError("Duplicate Linopy variable labels in fixed-neighbor targets.")
-    _audit_fully_fixed_capacity_constraints(
-        n, fixed_values, bound_clip_tolerance
-    )
-
-    for (
-        component,
-        nominal_attr,
-        extendable,
-        target_nominal,
-        variable_name,
-    ) in prepared_constraints:
-        nominal = n.model[variable_name].loc[extendable]
+        _relax_nominal_bound_sources(bound_context, target_nominal)
+        nominal = n.model[bound_context["variable_name"]].loc[extendable]
         dimension = nominal.dims[0]
         rhs = DataArray(
             target_nominal.to_numpy(),
@@ -491,11 +375,12 @@ def add_fixed_neighbor_capacity_constraints(
 
     logger.info(
         "Fixed-neighbor pre-solve validation passed for %s targets in %s; "
-        "clipped %s numerical bound violations with tolerance %.12g.",
+        "relaxed %s numerical bound conflicts with tolerance %.12g without "
+        "changing reference targets.",
         validated_targets,
         investment_year,
         len(bound_report),
-        bound_clip_tolerance,
+        bound_relax_tolerance,
     )
 
 
@@ -1331,6 +1216,17 @@ def additional_functionality(n, snapshots, snakemake):
         n, investment_year, constraints["limits_capacity_max"], "maximum"
     )
 
+    fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
+    if fixed_neighbor.get("enable", False):
+        add_fixed_neighbor_capacity_constraints(
+            n,
+            investment_year,
+            Path(snakemake.input.fixed_neighbor_capacities),
+            fixed_neighbor["domestic_country"],
+            strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
+            bound_relax_tolerance=fixed_neighbor.get("bound_relax_tolerance", 0.01),
+        )
+
     add_power_limits(n, investment_year, constraints["limits_power_max"])
 
     if snakemake.wildcards.clusters != "1":
@@ -1363,14 +1259,3 @@ def additional_functionality(n, snapshots, snakemake):
 
     if investment_year == 2020:
         adapt_nuclear_output(n)
-
-    fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
-    if fixed_neighbor.get("enable", False):
-        add_fixed_neighbor_capacity_constraints(
-            n,
-            investment_year,
-            Path(snakemake.input.fixed_neighbor_capacities),
-            fixed_neighbor["domestic_country"],
-            strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
-            bound_clip_tolerance=fixed_neighbor.get("bound_clip_tolerance", 0.01),
-        )
