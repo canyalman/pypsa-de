@@ -420,6 +420,19 @@ industry:
   waste_to_energy: true
   waste_to_energy_cc: true
 
+# Reuse the resolution-matched endogenous history shared by all pathways.
+# This only avoids resolving identical years; it does not fix non-DE capacities.
+common_reference_history:
+  enable: true
+  reference_networks:
+    2025: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+    2030: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+  reuse_reference_horizons: [2030]
+  reuse_reference_runs:
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
+
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#solving
 solving:
   runtime: 12h
