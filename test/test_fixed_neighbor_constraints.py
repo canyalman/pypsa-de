@@ -41,15 +41,25 @@ def build_generator_model(
     p_nom_min=0.0,
     p_nom_max=152.9999821847514,
     demand=0.0,
+    p_nom_extendable=True,
+    p_nom=0.0,
 ):
     n = pypsa.Network()
     n.add("Bus", "DE bus", country="DE")
     n.add("Bus", "BE bus", country="BE")
     n.add(
         "Generator",
+        "DE objective generator",
+        bus="DE bus",
+        p_nom_extendable=True,
+        capital_cost=1.0,
+    )
+    n.add(
+        "Generator",
         "BE2 0 0 onwind-2035",
         bus="BE bus",
-        p_nom_extendable=True,
+        p_nom_extendable=p_nom_extendable,
+        p_nom=p_nom,
         p_nom_min=p_nom_min,
         p_nom_max=p_nom_max,
         capital_cost=1.0,
@@ -185,6 +195,49 @@ def test_narrow_band_absorbs_tiny_reference_dispatch_residual(tmp_path):
     assert condition == "optimal"
     assert n.model.solution["Generator-p_nom"].to_pandas().at[asset] == pytest.approx(
         0.005
+    )
+
+
+def test_fixed_brownfield_capacity_accepts_solver_residual(tmp_path):
+    manifest = tmp_path / "manifest.csv"
+    write_manifest(manifest, 100.0)
+    n = build_generator_model(p_nom_extendable=False, p_nom=100.010342)
+
+    MODULE.add_fixed_neighbor_capacity_constraints(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.01,
+    )
+
+
+def test_fixed_brownfield_capacity_rejects_material_mismatch(tmp_path):
+    manifest = tmp_path / "manifest.csv"
+    write_manifest(manifest, 100.0)
+    n = build_generator_model(p_nom_extendable=False, p_nom=100.0111)
+
+    with pytest.raises(ValueError, match="fixed non-DE capacities differ"):
+        MODULE.add_fixed_neighbor_capacity_constraints(
+            n,
+            investment_year=2035,
+            manifest_path=manifest,
+            domestic_country="DE",
+            capacity_tolerance=0.01,
+        )
+
+
+def test_fixed_brownfield_capacity_accepts_exact_match(tmp_path):
+    manifest = tmp_path / "manifest.csv"
+    write_manifest(manifest, 100.0)
+    n = build_generator_model(p_nom_extendable=False, p_nom=100.0)
+
+    MODULE.add_fixed_neighbor_capacity_constraints(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.01,
     )
 
 

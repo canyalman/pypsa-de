@@ -219,11 +219,16 @@ def add_fixed_neighbor_capacity_constraints(
         ]
         fixed = target_index.difference(extendable)
         if strict_asset_match and not fixed.empty:
-            expected = component_targets.loc[fixed, "nominal"]
-            actual = static.loc[fixed, nominal_column]
-            mismatch = ~np.isclose(actual, expected, rtol=1e-9, atol=1e-6)
+            expected = component_targets.loc[fixed, "nominal"].astype(float)
+            actual = static.loc[fixed, nominal_column].astype(float)
+            # A capacity solved inside the reference band can cross the band
+            # edge by a sub-kW feasibility residual before becoming fixed in
+            # the next brownfield horizon. Keep the check absolute and tight.
+            fixed_tolerance = capacity_tolerance + 1e-3
+            difference = (actual - expected).abs()
+            mismatch = difference.gt(fixed_tolerance)
             if mismatch.any():
-                mismatched = fixed[np.asarray(mismatch)]
+                mismatched = difference.index[mismatch]
                 raise ValueError(
                     f"{component}: {len(mismatched)} fixed non-{domestic_country} "
                     f"capacities differ from the reference, e.g. "
