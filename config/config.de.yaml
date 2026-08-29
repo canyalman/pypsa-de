@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_nonde_4h_1h
+  prefix: bess_fixed_nonde_static_4h_1h
   name:
   # - ExPol
   # - KN2045_Mix
@@ -460,14 +460,16 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
-    # Fix all non-German capacity variables to the hourly endogenous 4h reference.
-    # Dispatch, cross-border flows, and all German endogenous capacity decisions remain free.
+    # Materialize all non-German nominal capacities from the hourly endogenous
+    # 4h reference before model creation. Dispatch, cross-border flows, and all
+    # German endogenous capacity decisions remain free.
     fixed_neighbor_capacities:
       enable: true
+      formulation: static
       domestic_country: DE
       strict_asset_match: true
-      # Keep reference capacities within a numerically narrow band. This avoids
-      # turning approximate 1H interior-point outputs into exact equalities.
+      # Tiny reference/native-bound residuals are clipped before capacities are
+      # converted to fixed network data; material mismatches still fail.
       capacity_tolerance: 0.012
       capacity_manifest: resources/fixed_neighbor_endo_4h_1h_capacities.csv
       reference_networks:
