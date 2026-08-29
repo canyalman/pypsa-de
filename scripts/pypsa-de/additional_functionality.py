@@ -179,13 +179,27 @@ def materialize_fixed_neighbor_capacities(
 
     Dispatch and state variables remain endogenous. Only nominal capacity variables
     are replaced by fixed network data, which avoids narrow equality bands in the
-    optimization model. The returned ledger records the annualized CAPEX removed
-    from PyPSA's objective by this conversion.
+    optimization model. Tiny reference dispatch residuals are converted to nominal
+    headroom within ``capacity_tolerance``. The returned ledger records the
+    annualized CAPEX removed from PyPSA's objective by this conversion.
     """
     if capacity_tolerance < 0:
         raise ValueError("Fixed-neighbor capacity tolerance must be non-negative.")
 
     manifest = pd.read_csv(manifest_path, dtype={"asset": str})
+    required_columns = {
+        "year",
+        "component",
+        "asset",
+        "nominal",
+        "operational_nominal",
+    }
+    missing_columns = required_columns.difference(manifest.columns)
+    if missing_columns:
+        raise ValueError(
+            "Fixed-neighbor manifest is missing operational feasibility data "
+            f"({sorted(missing_columns)}). Regenerate {manifest_path}."
+        )
     targets = manifest.loc[manifest["year"].eq(investment_year)].copy()
     if targets.empty:
         raise ValueError(
@@ -262,11 +276,35 @@ def materialize_fixed_neighbor_capacities(
         nominal_column = f"{nominal_attr}_nom"
         extendable_column = f"{nominal_attr}_nom_extendable"
         reference = component_targets.loc[assets, "nominal"].astype(float)
+        operational = component_targets.loc[assets, "operational_nominal"].astype(float)
         if not np.isfinite(reference).all():
             invalid = reference.index[~np.isfinite(reference)]
             raise ValueError(
                 f"{component}: non-finite reference capacities for "
                 f"{invalid[:3].tolist()}."
+            )
+        if not np.isfinite(operational).all():
+            invalid = operational.index[~np.isfinite(operational)]
+            raise ValueError(
+                f"{component}: non-finite operational capacity requirements for "
+                f"{invalid[:3].tolist()}."
+            )
+
+        operational_delta = (operational - reference).clip(lower=0.0)
+        numerical_headroom = operational_delta.gt(0.0) & operational_delta.le(
+            capacity_tolerance
+        )
+        feasible_reference = reference.copy()
+        feasible_reference.loc[numerical_headroom] = operational.loc[numerical_headroom]
+        larger_operational_residual = operational_delta.gt(capacity_tolerance)
+        if larger_operational_residual.any():
+            logger.info(
+                "%s: leaving %s reference capacities unchanged because their "
+                "reference operational residual exceeds the %.6f MW numerical "
+                "headroom threshold; dispatch remains endogenous.",
+                component,
+                int(larger_operational_residual.sum()),
+                capacity_tolerance,
             )
 
         original = static.loc[assets, nominal_column].astype(float)
@@ -298,10 +336,10 @@ def materialize_fixed_neighbor_capacities(
                 )
 
         lower, upper = _static_nominal_bounds(static, nominal_attr, assets)
-        applied = reference.copy()
+        applied = feasible_reference.copy()
         extendable_assets = assets[was_extendable]
         if not extendable_assets.empty:
-            ext_reference = reference.loc[extendable_assets]
+            ext_reference = feasible_reference.loc[extendable_assets]
             ext_lower = lower.loc[extendable_assets]
             ext_upper = upper.loc[extendable_assets]
             lower_delta = (ext_lower - ext_reference).where(
@@ -355,10 +393,16 @@ def materialize_fixed_neighbor_capacities(
                     "nominal_attribute": nominal_attr,
                     "original_nominal": original.at[asset],
                     "reference_nominal": reference.at[asset],
+                    "operational_nominal": operational.at[asset],
                     "applied_nominal": applied.at[asset],
                     "native_lower_bound": lower.at[asset],
                     "native_upper_bound": upper.at[asset],
                     "bound_adjustment": applied.at[asset] - reference.at[asset],
+                    "operational_headroom_adjustment": (
+                        operational_delta.at[asset]
+                        if numerical_headroom.at[asset]
+                        else 0.0
+                    ),
                     "was_extendable": was_extendable.at[asset],
                     "capital_cost": capital_cost.at[asset],
                     "removed_annualized_capex": removed_capex.at[asset],

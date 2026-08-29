@@ -472,10 +472,10 @@ solving:
       formulation: static
       domestic_country: DE
       strict_asset_match: true
-      # Tiny reference/native-bound residuals are clipped before capacities are
-      # converted to fixed network data; material mismatches still fail.
+      # Tiny reference/native-bound and dispatch-to-nominal residuals are
+      # reconciled before capacities are converted to fixed network data.
       capacity_tolerance: 0.012
-      capacity_manifest: resources/fixed_neighbor_endo_4h_1h_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_endo_4h_1h_static_capacities.csv
       reference_networks:
         2025: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
         2030: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
