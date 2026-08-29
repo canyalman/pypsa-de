@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: MIT
 
-"""Focused tests for tolerance-aware fixed-neighbor capacity bands."""
+"""Focused tests for tolerance-aware fixed-neighbor capacity formulations."""
 
 import importlib.util
 import sys
@@ -15,6 +15,12 @@ import pytest
 
 MODULE_PATH = (
     Path(__file__).parents[1] / "scripts" / "pypsa-de" / "additional_functionality.py"
+)
+EXTRACT_MODULE_PATH = (
+    Path(__file__).parents[1]
+    / "scripts"
+    / "pypsa-de"
+    / "extract_fixed_neighbor_capacities.py"
 )
 SPEC = importlib.util.spec_from_file_location("additional_functionality", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -36,6 +42,12 @@ finally:
         del sys.modules[PREPARE_SECTOR_NETWORK]
     else:
         sys.modules[PREPARE_SECTOR_NETWORK] = ORIGINAL_PREPARE_SECTOR_NETWORK
+
+EXTRACT_SPEC = importlib.util.spec_from_file_location(
+    "extract_fixed_neighbor_capacities", EXTRACT_MODULE_PATH
+)
+EXTRACT_MODULE = importlib.util.module_from_spec(EXTRACT_SPEC)
+EXTRACT_SPEC.loader.exec_module(EXTRACT_MODULE)
 
 
 def build_generator_model(
@@ -64,15 +76,12 @@ def build_generator_model(
 
 def write_manifest(path, nominal):
     path.write_text(
-        "year,component,asset,nominal\n"
-        f"2035,Generator,BE2 0 0 onwind-2035,{nominal}\n",
+        f"year,component,asset,nominal\n2035,Generator,BE2 0 0 onwind-2035,{nominal}\n",
         encoding="utf-8",
     )
 
 
-def test_small_upper_bound_mismatch_uses_intersecting_reference_band(
-    tmp_path, caplog
-):
+def test_small_upper_bound_mismatch_uses_intersecting_reference_band(tmp_path, caplog):
     asset = "BE2 0 0 onwind-2035"
     reference_target = 153.0012777901072
     manifest = tmp_path / "manifest.csv"
@@ -94,9 +103,7 @@ def test_small_upper_bound_mismatch_uses_intersecting_reference_band(
     assert fixed_lower.rhs.to_pandas().at[asset] == pytest.approx(
         reference_target - expected_tolerance
     )
-    assert fixed_upper.rhs.to_pandas().at[asset] == pytest.approx(
-        152.9999821847514
-    )
+    assert fixed_upper.rhs.to_pandas().at[asset] == pytest.approx(152.9999821847514)
     assert upper.rhs.to_pandas().at[asset] == 152.9999821847514
     assert "delta=0.001295605" in caplog.text
 
@@ -322,12 +329,12 @@ def build_all_component_static_network():
 def write_all_component_manifest(path):
     pd.DataFrame(
         [
-            (2035, "Generator", "BE generator", "p", 5.0),
-            (2035, "Link", "BE-DE link", "p", 5.0),
-            (2035, "Store", "BE store", "e", 5.0),
-            (2035, "StorageUnit", "BE storage unit", "p", 5.0),
-            (2035, "Line", "BE-DE line", "s", 5.0),
-            (2035, "Transformer", "BE-DE transformer", "s", 5.0),
+            (2035, "Generator", "BE generator", "p", 5.0, 5.0),
+            (2035, "Link", "BE-DE link", "p", 5.0, 5.0),
+            (2035, "Store", "BE store", "e", 5.0, 5.0),
+            (2035, "StorageUnit", "BE storage unit", "p", 5.0, 5.0),
+            (2035, "Line", "BE-DE line", "s", 5.0, 5.0),
+            (2035, "Transformer", "BE-DE transformer", "s", 5.0, 5.0),
         ],
         columns=[
             "year",
@@ -335,6 +342,7 @@ def write_all_component_manifest(path):
             "asset",
             "nominal_attribute",
             "nominal",
+            "operational_nominal",
         ],
     ).to_csv(path, index=False)
 
@@ -384,10 +392,12 @@ def build_static_generator_network(p_nom_max, p_nom=0.0, extendable=True):
     return n
 
 
-def write_static_generator_manifest(path, nominal):
+def write_static_generator_manifest(path, nominal, operational_nominal=None):
+    if operational_nominal is None:
+        operational_nominal = nominal
     path.write_text(
-        "year,component,asset,nominal_attribute,nominal\n"
-        f"2035,Generator,BE generator,p,{nominal}\n",
+        "year,component,asset,nominal_attribute,nominal,operational_nominal\n"
+        f"2035,Generator,BE generator,p,{nominal},{operational_nominal}\n",
         encoding="utf-8",
     )
 
@@ -412,6 +422,88 @@ def test_static_formulation_clips_tiny_native_bound_residual(tmp_path):
     assert ledger.at[0, "reference_nominal"] == pytest.approx(reference)
     assert ledger.at[0, "applied_nominal"] == pytest.approx(native_upper)
     assert ledger.at[0, "bound_adjustment"] == pytest.approx(native_upper - reference)
+
+
+def build_static_link_network():
+    n = pypsa.Network()
+    n.add("Bus", "AT gas", country="AT")
+    n.add("Bus", "AT industry", country="AT")
+    n.add(
+        "Link",
+        "AT gas for industry CC-2030",
+        bus0="AT gas",
+        bus1="AT industry",
+        p_nom=0.0,
+        p_nom_extendable=True,
+        capital_cost=2.0,
+    )
+    n.set_snapshots([0, 1])
+    n.links_t.p0.loc[:, "AT gas for industry CC-2030"] = [0.000155, 0.000216]
+    return n
+
+
+def write_static_link_manifest(path, nominal, operational_nominal):
+    path.write_text(
+        "year,component,asset,nominal_attribute,nominal,operational_nominal\n"
+        "2030,Link,AT gas for industry CC-2030,p,"
+        f"{nominal},{operational_nominal}\n",
+        encoding="utf-8",
+    )
+
+
+def test_reference_link_operation_defines_minimum_nominal_capacity():
+    n = build_static_link_network()
+
+    requirement = EXTRACT_MODULE.operational_nominal_requirement(
+        n, "Link", pd.Index(["AT gas for industry CC-2030"])
+    )
+
+    assert requirement.at["AT gas for industry CC-2030"] == pytest.approx(0.000216)
+
+
+def test_static_formulation_adds_tiny_operational_headroom(tmp_path):
+    manifest = tmp_path / "manifest.csv"
+    reference = 3.3013464375e-06
+    operational = 0.000216
+    write_static_link_manifest(manifest, reference, operational)
+    n = build_static_link_network()
+
+    ledger = MODULE.materialize_fixed_neighbor_capacities(
+        n,
+        investment_year=2030,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.012,
+    )
+
+    assert n.links.at["AT gas for industry CC-2030", "p_nom"] == pytest.approx(
+        operational
+    )
+    assert not n.links.at["AT gas for industry CC-2030", "p_nom_extendable"]
+    assert ledger.at[0, "operational_headroom_adjustment"] == pytest.approx(
+        operational - reference
+    )
+    assert ledger.at[0, "removed_annualized_capex"] == pytest.approx(operational * 2.0)
+
+
+def test_static_formulation_does_not_convert_material_dispatch_residual_to_capacity(
+    tmp_path,
+):
+    manifest = tmp_path / "manifest.csv"
+    write_static_link_manifest(manifest, nominal=1.0, operational_nominal=1.02)
+    n = build_static_link_network()
+
+    ledger = MODULE.materialize_fixed_neighbor_capacities(
+        n,
+        investment_year=2030,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.012,
+    )
+
+    assert n.links.at["AT gas for industry CC-2030", "p_nom"] == pytest.approx(1.0)
+    assert not n.links.at["AT gas for industry CC-2030", "p_nom_extendable"]
+    assert ledger.at[0, "operational_headroom_adjustment"] == pytest.approx(0.0)
 
 
 def test_static_formulation_rejects_material_native_bound_gap_without_mutation(
