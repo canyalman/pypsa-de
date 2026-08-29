@@ -367,13 +367,13 @@ def test_static_formulation_materializes_all_components_and_leaves_de_free(tmp_p
     ) in MODULE.FIXED_NEIGHBOR_COMPONENTS.items():
         row = ledger.loc[ledger["component"].eq(component)].iloc[0]
         static = getattr(n, list_name)
-        assert static.at[row.asset, f"{nominal_attr}_nom"] == pytest.approx(5.0)
+        assert static.at[row.asset, f"{nominal_attr}_nom"] == pytest.approx(5.012)
         assert not static.at[row.asset, f"{nominal_attr}_nom_extendable"]
 
     assert n.generators.at["DE generator", "p_nom"] == pytest.approx(1.0)
     assert n.generators.at["DE generator", "p_nom_extendable"]
     assert len(ledger) == 6
-    assert ledger["removed_annualized_capex"].sum() == pytest.approx(48.0)
+    assert ledger["removed_annualized_capex"].sum() == pytest.approx(48.144)
 
 
 def build_static_generator_network(p_nom_max, p_nom=0.0, extendable=True):
@@ -477,16 +477,18 @@ def test_static_formulation_adds_tiny_operational_headroom(tmp_path):
     )
 
     assert n.links.at["AT gas for industry CC-2030", "p_nom"] == pytest.approx(
-        operational
+        reference + 0.012
     )
     assert not n.links.at["AT gas for industry CC-2030", "p_nom_extendable"]
     assert ledger.at[0, "operational_headroom_adjustment"] == pytest.approx(
         operational - reference
     )
-    assert ledger.at[0, "removed_annualized_capex"] == pytest.approx(operational * 2.0)
+    assert ledger.at[0, "removed_annualized_capex"] == pytest.approx(
+        (reference + 0.012) * 2.0
+    )
 
 
-def test_static_formulation_does_not_convert_material_dispatch_residual_to_capacity(
+def test_static_formulation_only_adds_numerical_band_for_material_dispatch_residual(
     tmp_path,
 ):
     manifest = tmp_path / "manifest.csv"
@@ -501,7 +503,7 @@ def test_static_formulation_does_not_convert_material_dispatch_residual_to_capac
         capacity_tolerance=0.012,
     )
 
-    assert n.links.at["AT gas for industry CC-2030", "p_nom"] == pytest.approx(1.0)
+    assert n.links.at["AT gas for industry CC-2030", "p_nom"] == pytest.approx(1.012)
     assert not n.links.at["AT gas for industry CC-2030", "p_nom_extendable"]
     assert ledger.at[0, "operational_headroom_adjustment"] == pytest.approx(0.0)
 
@@ -579,8 +581,8 @@ def test_static_pre_model_hook_writes_capex_ledger_and_summary(tmp_path):
     )
     assert ledger_path.exists()
     ledger = pd.read_csv(ledger_path)
-    assert ledger.at[0, "removed_annualized_capex"] == pytest.approx(12.0)
+    assert ledger.at[0, "removed_annualized_capex"] == pytest.approx(12.036)
     assert n._fixed_neighbor_static_summary["materialized_assets"] == 1
     assert n._fixed_neighbor_static_summary[
         "removed_annualized_capex_eur"
-    ] == pytest.approx(12.0)
+    ] == pytest.approx(12.036)
