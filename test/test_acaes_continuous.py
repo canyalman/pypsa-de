@@ -58,7 +58,7 @@ def test_production_config_uses_approved_continuous_formulation():
 
     assert (
         config["run"]["prefix"]
-        == "caes_resc_continuous_fixed_nonde_4h_rte63_1h"
+        == "caes_resc_continuous_fixed_nonde_static_4h_rte63_1h"
     )
     assert config["run"]["name"] == ["KN2045_Mix_FixedRenewables"]
     assert options["round_trip_efficiency"] == 0.63
