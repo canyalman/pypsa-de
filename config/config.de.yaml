@@ -468,8 +468,8 @@ solving:
       formulation: static
       domestic_country: DE
       strict_asset_match: true
-      # Tiny reference/native-bound and dispatch-to-nominal residuals are
-      # reconciled before capacities are converted to fixed network data.
+      # Formerly extendable capacities are materialized at the upper edge of
+      # this numerical reference band, while native bounds remain enforced.
       capacity_tolerance: 0.012
       capacity_manifest: resources/fixed_neighbor_endo_4h_1h_static_capacities.csv
       reference_networks:
