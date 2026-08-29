@@ -149,6 +149,247 @@ def _fixed_neighbor_bound_violations(
     )
 
 
+def _static_nominal_bounds(static, nominal_attr, assets):
+    """Return native nominal bounds from a component's static table."""
+    lower_column = f"{nominal_attr}_nom_min"
+    upper_column = f"{nominal_attr}_nom_max"
+    lower = (
+        static[lower_column].reindex(assets).astype(float)
+        if lower_column in static
+        else pd.Series(-np.inf, index=assets, dtype=float)
+    )
+    upper = (
+        static[upper_column].reindex(assets).astype(float)
+        if upper_column in static
+        else pd.Series(np.inf, index=assets, dtype=float)
+    )
+    return lower.fillna(-np.inf), upper.fillna(np.inf)
+
+
+def materialize_fixed_neighbor_capacities(
+    n,
+    investment_year,
+    manifest_path,
+    domestic_country,
+    strict_asset_match=True,
+    capacity_tolerance=0.01,
+):
+    """
+    Write reference non-domestic capacities into the network before modelling.
+
+    Dispatch and state variables remain endogenous. Only nominal capacity variables
+    are replaced by fixed network data, which avoids narrow equality bands in the
+    optimization model. The returned ledger records the annualized CAPEX removed
+    from PyPSA's objective by this conversion.
+    """
+    if capacity_tolerance < 0:
+        raise ValueError("Fixed-neighbor capacity tolerance must be non-negative.")
+
+    manifest = pd.read_csv(manifest_path, dtype={"asset": str})
+    targets = manifest.loc[manifest["year"].eq(investment_year)].copy()
+    if targets.empty:
+        raise ValueError(
+            f"No fixed-neighbor capacity targets found for {investment_year} in "
+            f"{manifest_path}."
+        )
+
+    unknown_components = set(targets["component"]) - set(FIXED_NEIGHBOR_COMPONENTS)
+    if unknown_components:
+        raise ValueError(
+            "Unknown fixed-neighbor components in the manifest: "
+            f"{sorted(unknown_components)}."
+        )
+
+    pending_updates = []
+    ledger_rows = []
+    for component, (
+        list_name,
+        nominal_attr,
+        bus_columns,
+    ) in FIXED_NEIGHBOR_COMPONENTS.items():
+        component_targets = targets.loc[targets["component"].eq(component)].copy()
+        if component_targets.empty:
+            continue
+        if component_targets["asset"].duplicated().any():
+            raise ValueError(
+                f"Duplicate {component} entries in fixed-neighbor manifest for "
+                f"{investment_year}."
+            )
+
+        component_targets = component_targets.set_index("asset")
+        static = getattr(n, list_name)
+        target_index = component_targets.index
+        missing = target_index.difference(static.index)
+        if strict_asset_match and not missing.empty:
+            raise ValueError(
+                f"{component}: {len(missing)} reference assets are missing from the "
+                f"current network, e.g. {missing[:3].tolist()}."
+            )
+        target_index = target_index.intersection(static.index)
+
+        active = static.get(
+            "active", pd.Series(True, index=static.index, dtype=bool)
+        ).fillna(False)
+        external_active = _external_asset_index(
+            n, static, bus_columns, domestic_country
+        ).intersection(static.index[active])
+        unexpected = external_active.difference(target_index)
+        if strict_asset_match and not unexpected.empty:
+            raise ValueError(
+                f"{component}: {len(unexpected)} active non-{domestic_country} assets "
+                "are absent from the reference manifest, e.g. "
+                f"{unexpected[:3].tolist()}."
+            )
+
+        inactive_targets = target_index.difference(static.index[active])
+        if strict_asset_match and not inactive_targets.empty:
+            raise ValueError(
+                f"{component}: {len(inactive_targets)} reference assets are inactive "
+                f"in the current network, e.g. {inactive_targets[:3].tolist()}."
+            )
+        non_external_targets = target_index.difference(external_active)
+        if strict_asset_match and not non_external_targets.empty:
+            raise ValueError(
+                f"{component}: {len(non_external_targets)} reference assets are not "
+                f"active non-{domestic_country} assets, e.g. "
+                f"{non_external_targets[:3].tolist()}."
+            )
+
+        assets = target_index.intersection(external_active)
+        if assets.empty:
+            continue
+
+        nominal_column = f"{nominal_attr}_nom"
+        extendable_column = f"{nominal_attr}_nom_extendable"
+        reference = component_targets.loc[assets, "nominal"].astype(float)
+        if not np.isfinite(reference).all():
+            invalid = reference.index[~np.isfinite(reference)]
+            raise ValueError(
+                f"{component}: non-finite reference capacities for "
+                f"{invalid[:3].tolist()}."
+            )
+
+        original = static.loc[assets, nominal_column].astype(float)
+        was_extendable = (
+            static.loc[assets, extendable_column].fillna(False).astype(bool)
+        )
+        fixed_assets = assets[~was_extendable]
+        if strict_asset_match and not fixed_assets.empty:
+            fixed_difference = (
+                original.loc[fixed_assets] - reference.loc[fixed_assets]
+            ).abs()
+            fixed_tolerance = capacity_tolerance + 1e-3
+            mismatch = fixed_difference.gt(fixed_tolerance)
+            if mismatch.any():
+                mismatched = fixed_difference.index[mismatch]
+                details = pd.DataFrame(
+                    {
+                        "component": component,
+                        "asset": mismatched,
+                        "current_nominal": original.loc[mismatched].to_numpy(),
+                        "reference_nominal": reference.loc[mismatched].to_numpy(),
+                        "delta": fixed_difference.loc[mismatched].to_numpy(),
+                        "allowed_tolerance": fixed_tolerance,
+                    }
+                ).to_string(index=False)
+                raise ValueError(
+                    f"{component}: fixed non-{domestic_country} capacities differ "
+                    f"materially from the reference:\n{details}"
+                )
+
+        lower, upper = _static_nominal_bounds(static, nominal_attr, assets)
+        applied = reference.copy()
+        extendable_assets = assets[was_extendable]
+        if not extendable_assets.empty:
+            ext_reference = reference.loc[extendable_assets]
+            ext_lower = lower.loc[extendable_assets]
+            ext_upper = upper.loc[extendable_assets]
+            lower_delta = (ext_lower - ext_reference).where(
+                ext_reference < ext_lower, 0.0
+            )
+            upper_delta = (ext_reference - ext_upper).where(
+                ext_reference > ext_upper, 0.0
+            )
+            bound_delta = pd.concat([lower_delta, upper_delta], axis=1).max(axis=1)
+            material = bound_delta.gt(capacity_tolerance)
+            if material.any():
+                invalid = bound_delta.index[material]
+                details = pd.DataFrame(
+                    {
+                        "component": component,
+                        "asset": invalid,
+                        "reference_nominal": ext_reference.loc[invalid].to_numpy(),
+                        "lower_bound": ext_lower.loc[invalid].to_numpy(),
+                        "upper_bound": ext_upper.loc[invalid].to_numpy(),
+                        "delta": bound_delta.loc[invalid].to_numpy(),
+                        "allowed_tolerance": capacity_tolerance,
+                    }
+                ).to_string(index=False)
+                raise ValueError(
+                    "Fixed-neighbor reference capacities exceed native nominal "
+                    f"bounds by more than the allowed tolerance:\n{details}"
+                )
+            applied.loc[extendable_assets] = ext_reference.clip(
+                lower=ext_lower, upper=ext_upper
+            )
+
+        capital_cost = (
+            static.get("capital_cost", pd.Series(0.0, index=static.index, dtype=float))
+            .reindex(assets)
+            .fillna(0.0)
+            .astype(float)
+        )
+        removed_capex = pd.Series(0.0, index=assets, dtype=float)
+        removed_capex.loc[extendable_assets] = (
+            applied.loc[extendable_assets] - original.loc[extendable_assets]
+        ) * capital_cost.loc[extendable_assets]
+
+        countries = _asset_countries(n, static.loc[assets], bus_columns)
+        for asset in assets:
+            ledger_rows.append(
+                {
+                    "year": investment_year,
+                    "component": component,
+                    "asset": asset,
+                    "countries": ";".join(sorted(countries[asset])),
+                    "nominal_attribute": nominal_attr,
+                    "original_nominal": original.at[asset],
+                    "reference_nominal": reference.at[asset],
+                    "applied_nominal": applied.at[asset],
+                    "native_lower_bound": lower.at[asset],
+                    "native_upper_bound": upper.at[asset],
+                    "bound_adjustment": applied.at[asset] - reference.at[asset],
+                    "was_extendable": was_extendable.at[asset],
+                    "capital_cost": capital_cost.at[asset],
+                    "removed_annualized_capex": removed_capex.at[asset],
+                }
+            )
+        pending_updates.append(
+            (static, assets, nominal_column, extendable_column, applied)
+        )
+
+    for static, assets, nominal_column, extendable_column, applied in pending_updates:
+        static.loc[assets, nominal_column] = applied
+        static.loc[assets, extendable_column] = False
+
+    ledger = pd.DataFrame(ledger_rows)
+    if ledger.empty:
+        raise ValueError(
+            f"No active non-{domestic_country} capacities were materialized for "
+            f"{investment_year}."
+        )
+    ledger = ledger.sort_values(["component", "asset"]).reset_index(drop=True)
+    logger.info(
+        "Materialized %s non-%s capacities for %s; removed annualized CAPEX "
+        "from the raw objective is %.6f EUR/a.",
+        len(ledger),
+        domestic_country,
+        investment_year,
+        ledger["removed_annualized_capex"].sum(),
+    )
+    return ledger
+
+
 def add_fixed_neighbor_capacity_constraints(
     n,
     investment_year,
@@ -1279,6 +1520,60 @@ def adapt_nuclear_output(n):
     )
 
 
+def prepare_network_before_model(n, snakemake):
+    """Apply optional PyPSA-DE network changes before Linopy model creation."""
+    constraints = snakemake.params.solving["constraints"]
+    fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
+    if not fixed_neighbor.get("enable", False):
+        return
+
+    formulation = fixed_neighbor.get("formulation", "constraint_band")
+    if formulation == "constraint_band":
+        return
+    if formulation != "static":
+        raise ValueError(
+            "fixed_neighbor_capacities.formulation must be either "
+            f"'constraint_band' or 'static', not {formulation!r}."
+        )
+
+    investment_year = int(snakemake.wildcards.planning_horizons[-4:])
+    ledger = materialize_fixed_neighbor_capacities(
+        n,
+        investment_year,
+        Path(snakemake.input.fixed_neighbor_capacities),
+        fixed_neighbor["domestic_country"],
+        strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
+        capacity_tolerance=fixed_neighbor.get("capacity_tolerance", 0.01),
+    )
+
+    configured_ledger = (
+        snakemake.output.get("fixed_neighbor_capex")
+        if hasattr(snakemake.output, "get")
+        else getattr(snakemake.output, "fixed_neighbor_capex", None)
+    )
+    if configured_ledger:
+        ledger_path = Path(str(configured_ledger))
+    else:
+        network_output = Path(str(snakemake.output.network))
+        ledger_path = (
+            network_output.parent.parent
+            / "costs"
+            / f"fixed_neighbor_static_capex_{network_output.stem}.csv"
+        )
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    ledger.to_csv(ledger_path, index=False)
+
+    removed_capex = float(ledger["removed_annualized_capex"].sum())
+    n._fixed_neighbor_static_summary = {
+        "formulation": formulation,
+        "investment_year": investment_year,
+        "materialized_assets": int(len(ledger)),
+        "removed_annualized_capex_eur": removed_capex,
+        "capex_ledger": str(ledger_path),
+    }
+    logger.info("Wrote fixed-neighbor static CAPEX ledger to %s.", ledger_path)
+
+
 def additional_functionality(n, snapshots, snakemake):
     logger.info("Adding Ariadne-specific functionality")
 
@@ -1295,14 +1590,27 @@ def additional_functionality(n, snapshots, snakemake):
 
     fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
     if fixed_neighbor.get("enable", False):
-        add_fixed_neighbor_capacity_constraints(
-            n,
-            investment_year,
-            Path(snakemake.input.fixed_neighbor_capacities),
-            fixed_neighbor["domestic_country"],
-            strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
-            capacity_tolerance=fixed_neighbor.get("capacity_tolerance", 0.01),
-        )
+        formulation = fixed_neighbor.get("formulation", "constraint_band")
+        if formulation == "constraint_band":
+            add_fixed_neighbor_capacity_constraints(
+                n,
+                investment_year,
+                Path(snakemake.input.fixed_neighbor_capacities),
+                fixed_neighbor["domestic_country"],
+                strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
+                capacity_tolerance=fixed_neighbor.get("capacity_tolerance", 0.01),
+            )
+        elif formulation == "static":
+            logger.info(
+                "Skipping fixed-neighbor Linopy capacity bands because non-%s "
+                "capacities were materialized before model creation.",
+                fixed_neighbor["domestic_country"],
+            )
+        else:
+            raise ValueError(
+                "fixed_neighbor_capacities.formulation must be either "
+                f"'constraint_band' or 'static', not {formulation!r}."
+            )
 
     acaes_options = (
         snakemake.config.get("electricity", {})
