@@ -12,6 +12,18 @@ def fixed_neighbor_capacity_manifest(wildcards):
     return settings["capacity_manifest"]
 
 
+fixed_neighbor_settings = config.get("solving", {}).get("constraints", {}).get(
+    "fixed_neighbor_capacities", {}
+)
+fixed_neighbor_static_capex_output = (
+    RESULTS
+    + "costs/fixed_neighbor_static_capex_base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.csv"
+    if fixed_neighbor_settings.get("enable", False)
+    and fixed_neighbor_settings.get("formulation") == "static"
+    else []
+)
+
+
 rule add_existing_baseyear:
     input:
         network=lambda w: (
@@ -150,6 +162,7 @@ rule solve_sector_network_myopic:
         + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
         config=RESULTS
         + "configs/config.base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.yaml",
+        fixed_neighbor_capex=fixed_neighbor_static_capex_output,
         model=(
             RESULTS
             + "models/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc"

@@ -1437,6 +1437,29 @@ def add_co2_atmosphere_constraint(n, snapshots):
             n.model.add_constraints(lhs <= rhs, name=f"GlobalConstraint-{name}")
 
 
+def load_custom_extra_functionality_module(source):
+    """Load the configured custom functionality module once."""
+    source_path = pathlib.Path(source).resolve()
+    if not source_path.exists():
+        raise FileNotFoundError(f"{source_path} does not exist")
+    source_directory = os.path.dirname(source_path)
+    if source_directory not in sys.path:
+        sys.path.append(source_directory)
+    module_name = os.path.splitext(os.path.basename(source_path))[0]
+    return importlib.import_module(module_name)
+
+
+def apply_custom_pre_model_functionality(n, snakemake) -> None:
+    """Run an optional custom hook before Linopy variables are created."""
+    source = snakemake.params.custom_extra_functionality
+    if not source:
+        return
+    module = load_custom_extra_functionality_module(source)
+    prepare = getattr(module, "prepare_network_before_model", None)
+    if prepare is not None:
+        prepare(n, snakemake)
+
+
 def extra_functionality(
     n: pypsa.Network, snapshots: pd.DatetimeIndex, planning_horizons: str | None = None
 ) -> None:
@@ -1508,12 +1531,11 @@ def extra_functionality(
         add_import_limit_constraint(n, snapshots)
 
     if n.params.custom_extra_functionality:
-        source_path = pathlib.Path(n.params.custom_extra_functionality).resolve()
-        assert source_path.exists(), f"{source_path} does not exist"
-        sys.path.append(os.path.dirname(source_path))
-        module_name = os.path.splitext(os.path.basename(source_path))[0]
-        module = importlib.import_module(module_name)
-        custom_extra_functionality = getattr(module, module_name)
+        module = load_custom_extra_functionality_module(
+            n.params.custom_extra_functionality
+        )
+        function_name = pathlib.Path(n.params.custom_extra_functionality).stem
+        custom_extra_functionality = getattr(module, function_name)
         custom_extra_functionality(n, snapshots, snakemake)  # pylint: disable=E0601
 
 
@@ -1722,6 +1744,12 @@ if __name__ == "__main__":
         rolling_horizon=cf_solving["rolling_horizon"],
     )
 
+    # Some custom capacity treatments must run before PyPSA creates nominal
+    # investment variables. Ordinary custom constraints still run afterwards.
+    n.config = snakemake.config
+    n.params = snakemake.params
+    apply_custom_pre_model_functionality(n, snakemake)
+
     # Determine solve mode
     rolling_horizon = cf_solving.get("rolling_horizon", False)
     skip_iterations = cf_solving.get("skip_iterations", False)
@@ -1822,6 +1850,14 @@ if __name__ == "__main__":
         )
 
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    fixed_neighbor_summary = getattr(n, "_fixed_neighbor_static_summary", None)
+    if fixed_neighbor_summary is not None:
+        fixed_neighbor_summary = dict(fixed_neighbor_summary)
+        fixed_neighbor_summary["raw_objective_eur"] = float(n.objective)
+        fixed_neighbor_summary["objective_including_fixed_nonde_capex_eur"] = float(
+            n.objective + fixed_neighbor_summary["removed_annualized_capex_eur"]
+        )
+        n.meta["fixed_neighbor_static"] = fixed_neighbor_summary
     n.export_to_netcdf(snakemake.output.network)
 
     if snakemake.output.get("model"):
