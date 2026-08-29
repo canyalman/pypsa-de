@@ -367,8 +367,24 @@ def materialize_fixed_neighbor_capacities(
                     "Fixed-neighbor reference capacities exceed native nominal "
                     f"bounds by more than the allowed tolerance:\n{details}"
                 )
-            applied.loc[extendable_assets] = ext_reference.clip(
+            # The former Linopy formulation fixed these variables inside a
+            # reference +/- tolerance band. Materialize the upper edge so that
+            # eliminating the capacity variables does not also eliminate the
+            # small aggregate feasibility margin used by the solved model.
+            numerical_upper = reference.loc[extendable_assets] + capacity_tolerance
+            numerical_upper = pd.concat(
+                [numerical_upper, ext_reference], axis=1
+            ).max(axis=1)
+            applied.loc[extendable_assets] = numerical_upper.clip(
                 lower=ext_lower, upper=ext_upper
+            )
+            logger.info(
+                "%s: materialized %s previously extendable non-%s capacities "
+                "at the upper edge of the %.6f MW numerical reference band.",
+                component,
+                len(extendable_assets),
+                domestic_country,
+                capacity_tolerance,
             )
 
         capital_cost = (
