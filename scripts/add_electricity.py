@@ -1134,6 +1134,7 @@ def attach_stores(
     costs: pd.DataFrame,
     buses_i: list,
     extendable_carriers: list,
+    carrier_options: dict | None = None,
 ):
     """
     Attach stores to the network.
@@ -1148,11 +1149,30 @@ def attach_stores(
         List of high voltage electricity buses.
     extendable_carriers : list
         List of extendable storage carrier names.
+    carrier_options : dict, optional
+        Carrier-specific construction and cost assumptions.
     """
+    carrier_options = carrier_options or {}
     available_carriers = get_available_storage_carriers(extendable_carriers)
     n.add("Carrier", available_carriers)
 
     for carrier in available_carriers:
+        options = carrier_options.get(carrier, {})
+        carrier_buses = pd.Index(buses_i)
+        countries = options.get("countries")
+        bus_carriers = options.get("bus_carriers")
+        if countries is not None:
+            carrier_buses = carrier_buses[
+                n.buses.loc[carrier_buses, "country"].isin(countries).to_numpy()
+            ]
+        if bus_carriers is not None:
+            carrier_buses = carrier_buses[
+                n.buses.loc[carrier_buses, "carrier"].isin(bus_carriers).to_numpy()
+            ]
+        if carrier_buses.empty:
+            logger.warning("No eligible buses found for storage carrier '%s'.", carrier)
+            continue
+
         lookup = STORE_LOOKUP[carrier]
         lookup_store = lookup["store"]
         if "bicharger" in lookup:
@@ -1163,21 +1183,90 @@ def attach_stores(
 
         roundtrip_correction = lookup.get("roundtrip_correction", 1)
 
-        bus_names = buses_i + f" {carrier}"
+        store_capital_cost = costs.at[lookup_store, "capital_cost"]
+        store_onight_cost = costs.at[lookup_store, "investment"]
+        store_lifetime = costs.at[lookup_store, "lifetime"]
+        store_standing_loss = None
+        charge_efficiency = (
+            costs.at[lookup_charge, "efficiency"] ** roundtrip_correction
+        )
+        charge_capital_cost = costs.at[lookup_charge, "capital_cost"]
+        charge_onight_cost = costs.at[lookup_charge, "investment"]
+        charge_marginal_cost = costs.at[lookup_charge, "marginal_cost"]
+        charge_lifetime = costs.at[lookup_charge, "lifetime"]
+        discharge_efficiency = (
+            costs.at[lookup_discharge, "efficiency"] ** roundtrip_correction
+        )
+        discharge_marginal_cost = costs.at[lookup_discharge, "marginal_cost"]
+        discharge_lifetime = costs.at[lookup_discharge, "lifetime"]
+
+        if carrier == "iron-air":
+            required = {
+                "charging_efficiency",
+                "discharging_efficiency",
+                "combined_capex_eur_per_kw_ac",
+                "fom_percent",
+                "lifetime_years",
+                "discount_rate",
+                "standing_loss_per_hour",
+                "marginal_cost_eur_per_mwh",
+            }
+            missing = required.difference(options)
+            if missing:
+                raise ValueError(
+                    "Missing iron-air storage options: " + ", ".join(sorted(missing))
+                )
+
+            lifetime = float(options["lifetime_years"])
+            investment = float(options["combined_capex_eur_per_kw_ac"]) * 1e3
+            discount_rate = float(options["discount_rate"])
+            fom = float(options["fom_percent"]) / 100.0
+            nyears = n.snapshot_weightings.generators.sum() / 8760.0
+
+            # The complete fixed-100-hour system cost is charged once to the
+            # grid-facing charger capacity. The sizing constraint in
+            # solve_network.py makes this capacity equal to rated AC output.
+            store_capital_cost = 0.0
+            store_onight_cost = 0.0
+            store_lifetime = lifetime
+            store_standing_loss = float(options["standing_loss_per_hour"])
+            charge_efficiency = float(options["charging_efficiency"])
+            charge_capital_cost = (
+                calculate_annuity(lifetime, discount_rate) + fom
+            ) * investment * nyears
+            charge_onight_cost = investment
+            charge_marginal_cost = float(options["marginal_cost_eur_per_mwh"])
+            charge_lifetime = lifetime
+            discharge_efficiency = float(options["discharging_efficiency"])
+            discharge_marginal_cost = float(options["marginal_cost_eur_per_mwh"])
+            discharge_lifetime = lifetime
+
+        bus_names = carrier_buses + f" {carrier}"
         charge_name = "Electrolysis" if lookup_charge == "electrolysis" else "charger"
         discharge_name = (
             "Fuel Cell" if lookup_discharge == "fuel cell" else "discharger"
         )
 
+        bus_kwargs = (
+            {"country": n.buses.loc[carrier_buses, "country"].to_numpy()}
+            if carrier == "iron-air"
+            else {}
+        )
         n.add(
             "Bus",
             bus_names,
-            location=buses_i,
+            location=carrier_buses,
             carrier=carrier,
-            x=n.buses.loc[list(buses_i)].x.values,
-            y=n.buses.loc[list(buses_i)].y.values,
+            x=n.buses.loc[list(carrier_buses)].x.values,
+            y=n.buses.loc[list(carrier_buses)].y.values,
+            **bus_kwargs,
         )
 
+        store_kwargs = (
+            {"standing_loss": store_standing_loss}
+            if store_standing_loss is not None
+            else {}
+        )
         n.add(
             "Store",
             bus_names,
@@ -1185,9 +1274,10 @@ def attach_stores(
             e_cyclic=True,
             e_nom_extendable=True,
             carrier=carrier,
-            capital_cost=costs.at[lookup_store, "capital_cost"],
-            onight_cost=costs.at[lookup_store, "investment"],
-            lifetime=costs.at[lookup_store, "lifetime"],
+            capital_cost=store_capital_cost,
+            onight_cost=store_onight_cost,
+            lifetime=store_lifetime,
+            **store_kwargs,
         )
 
         n.add("Carrier", [f"{carrier} {charge_name}", f"{carrier} {discharge_name}"])
@@ -1196,15 +1286,15 @@ def attach_stores(
             "Link",
             bus_names,
             suffix=f" {charge_name}",
-            bus0=buses_i,
+            bus0=carrier_buses,
             bus1=bus_names,
             carrier=f"{carrier} {charge_name}",
-            efficiency=costs.at[lookup_charge, "efficiency"] ** roundtrip_correction,
-            capital_cost=costs.at[lookup_charge, "capital_cost"],
-            onight_cost=costs.at[lookup_charge, "investment"],
+            efficiency=charge_efficiency,
+            capital_cost=charge_capital_cost,
+            onight_cost=charge_onight_cost,
             p_nom_extendable=True,
-            marginal_cost=costs.at[lookup_charge, "marginal_cost"],
-            lifetime=costs.at[lookup_charge, "lifetime"],
+            marginal_cost=charge_marginal_cost,
+            lifetime=charge_lifetime,
         )
 
         n.add(
@@ -1212,12 +1302,14 @@ def attach_stores(
             bus_names,
             suffix=f" {discharge_name}",
             bus0=bus_names,
-            bus1=buses_i,
+            bus1=carrier_buses,
             carrier=f"{carrier} {discharge_name}",
-            efficiency=costs.at[lookup_discharge, "efficiency"] ** roundtrip_correction,
+            efficiency=discharge_efficiency,
+            capital_cost=0.0,
+            onight_cost=0.0,
             p_nom_extendable=True,
-            marginal_cost=costs.at[lookup_discharge, "marginal_cost"],
-            lifetime=costs.at[lookup_discharge, "lifetime"],
+            marginal_cost=discharge_marginal_cost,
+            lifetime=discharge_lifetime,
         )
 
     logger.info(
@@ -1352,7 +1444,13 @@ if __name__ == "__main__":
     attach_storageunits(
         n, costs, n.buses.index, extendable_carriers["StorageUnit"], max_hours
     )
-    attach_stores(n, costs, n.buses.index, extendable_carriers["Store"])
+    attach_stores(
+        n,
+        costs,
+        n.buses.index,
+        extendable_carriers["Store"],
+        params.electricity.get("storage_options", {}),
+    )
 
     if params.electricity.get("estimate_battery_capacities", False):
         attach_existing_batteries(n, costs, ppl)
