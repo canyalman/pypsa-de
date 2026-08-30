@@ -703,6 +703,75 @@ def test_static_formulation_prunes_tiny_carried_asset_absent_from_current_manife
     assert residual.applied_nominal == pytest.approx(0.0)
 
 
+def test_static_formulation_prunes_materialized_link_dropped_by_next_reference(
+    tmp_path,
+):
+    previous_nominal = 5.2865694980337015
+    carried_nominal = previous_nominal + 0.012
+    manifest = tmp_path / "manifest.csv"
+    pd.DataFrame(
+        [
+            (
+                2030,
+                "Link",
+                "DK process emissions CC-2030",
+                "p",
+                previous_nominal,
+                previous_nominal + 0.0002,
+            ),
+            (2035, "Link", "BE reference link-2035", "p", 5.0, 5.0),
+        ],
+        columns=[
+            "year",
+            "component",
+            "asset",
+            "nominal_attribute",
+            "nominal",
+            "operational_nominal",
+        ],
+    ).to_csv(manifest, index=False)
+
+    n = pypsa.Network()
+    n.add("Bus", "DE bus", country="DE")
+    n.add("Bus", "BE bus", country="BE")
+    n.add("Bus", "DK bus", country="DK")
+    n.add(
+        "Link",
+        "DK process emissions CC-2030",
+        bus0="DK bus",
+        bus1="DK bus",
+        p_nom=carried_nominal,
+        p_nom_extendable=False,
+        capital_cost=3.0,
+    )
+    n.add(
+        "Link",
+        "BE reference link-2035",
+        bus0="BE bus",
+        bus1="BE bus",
+        p_nom_extendable=True,
+        capital_cost=3.0,
+    )
+
+    ledger = MODULE.materialize_fixed_neighbor_capacities(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.012,
+        bound_clip_tolerance=0.05,
+    )
+
+    assert n.links.at["DK process emissions CC-2030", "p_nom"] == pytest.approx(0.0)
+    assert not n.links.at["DK process emissions CC-2030", "p_nom_extendable"]
+    carried = ledger.loc[
+        ledger["asset"].eq("DK process emissions CC-2030")
+    ].iloc[0]
+    assert carried.original_nominal == pytest.approx(carried_nominal)
+    assert carried.reference_nominal == pytest.approx(0.0)
+    assert carried.applied_nominal == pytest.approx(0.0)
+
+
 def test_static_formulation_rejects_material_asset_absent_from_current_manifest(
     tmp_path,
 ):
