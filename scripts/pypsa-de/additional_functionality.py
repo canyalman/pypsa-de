@@ -271,21 +271,22 @@ def materialize_fixed_neighbor_capacities(
             previous_reference = previous_component_targets.get(
                 "nominal", pd.Series(dtype=float)
             ).reindex(unexpected)
-            # A tiny extendable investment can be materialized at the upper edge
-            # of the numerical band in one horizon and then survive brownfield
-            # transfer as a fixed asset. The endogenous reference drops it in the
-            # next horizon. Reconcile only assets whose previous reference target
-            # and carried capacity prove that exact numerical-residual history.
-            carried_upper = previous_reference + capacity_tolerance + 1e-3
-            numerical_residual = (
+            # Materializing a reference capacity makes the asset non-extendable.
+            # It can therefore survive brownfield transfer even when the original
+            # endogenous reference drops it in the next horizon (for example at
+            # the generic capacity threshold). Reconcile only fixed assets whose
+            # previous target and carried capacity prove that exact history.
+            carried_tolerance = max(capacity_tolerance, bound_clip_tolerance) + 1e-3
+            carried_delta = (original_unexpected - previous_reference).abs()
+            carried_reference_asset = (
                 previous_reference.notna()
                 & previous_reference.ge(0.0)
-                & previous_reference.le(capacity_tolerance)
                 & np.isfinite(original_unexpected)
-                & original_unexpected.abs().le(carried_upper)
+                & ~static.loc[unexpected, extendable_column].fillna(False).astype(bool)
+                & carried_delta.le(carried_tolerance)
             )
-            residual_assets = numerical_residual.index[numerical_residual]
-            material_unexpected = unexpected.difference(residual_assets)
+            carried_assets = carried_reference_asset.index[carried_reference_asset]
+            material_unexpected = unexpected.difference(carried_assets)
             if not material_unexpected.empty:
                 details = pd.DataFrame(
                     {
@@ -297,24 +298,25 @@ def materialize_fixed_neighbor_capacities(
                         "previous_reference_nominal": previous_reference.reindex(
                             material_unexpected
                         ).to_numpy(),
-                        "allowed_carried_nominal": carried_upper.reindex(
+                        "carried_delta": carried_delta.reindex(
                             material_unexpected
                         ).to_numpy(),
+                        "allowed_tolerance": carried_tolerance,
                     }
                 ).to_string(index=False)
                 raise ValueError(
                     f"{component}: {len(material_unexpected)} active non-"
                     f"{domestic_country} assets are absent from the reference "
-                    "manifest and cannot be reconciled as tiny carried numerical "
-                    f"residuals:\n{details}"
+                    "manifest and cannot be reconciled as capacities materialized "
+                    f"from the previous reference horizon:\n{details}"
                 )
 
-            if not residual_assets.empty:
+            if not carried_assets.empty:
                 residual_lower, residual_upper = _static_nominal_bounds(
-                    static, nominal_attr, residual_assets
+                    static, nominal_attr, carried_assets
                 )
                 residual_extendable = (
-                    static.loc[residual_assets, extendable_column]
+                    static.loc[carried_assets, extendable_column]
                     .fillna(False)
                     .astype(bool)
                 )
@@ -323,14 +325,14 @@ def materialize_fixed_neighbor_capacities(
                         "capital_cost",
                         pd.Series(0.0, index=static.index, dtype=float),
                     )
-                    .reindex(residual_assets)
+                    .reindex(carried_assets)
                     .fillna(0.0)
                     .astype(float)
                 )
                 residual_countries = _asset_countries(
-                    n, static.loc[residual_assets], bus_columns
+                    n, static.loc[carried_assets], bus_columns
                 )
-                for asset in residual_assets:
+                for asset in carried_assets:
                     ledger_rows.append(
                         {
                             "year": investment_year,
@@ -356,18 +358,18 @@ def materialize_fixed_neighbor_capacities(
                 pending_updates.append(
                     (
                         static,
-                        residual_assets,
+                        carried_assets,
                         nominal_column,
                         extendable_column,
-                        pd.Series(0.0, index=residual_assets, dtype=float),
+                        pd.Series(0.0, index=carried_assets, dtype=float),
                     )
                 )
-                external_active = external_active.difference(residual_assets)
+                external_active = external_active.difference(carried_assets)
                 logger.info(
-                    "%s: pruned %s tiny carried non-%s assets absent from the "
-                    "%s reference manifest.",
+                    "%s: pruned %s carried non-%s assets materialized from the "
+                    "previous horizon but absent from the %s reference manifest.",
                     component,
-                    len(residual_assets),
+                    len(carried_assets),
                     domestic_country,
                     investment_year,
                 )
