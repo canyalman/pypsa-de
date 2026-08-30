@@ -173,6 +173,7 @@ def materialize_fixed_neighbor_capacities(
     domestic_country,
     strict_asset_match=True,
     capacity_tolerance=0.01,
+    bound_clip_tolerance=None,
 ):
     """
     Write reference non-domestic capacities into the network before modelling.
@@ -185,6 +186,12 @@ def materialize_fixed_neighbor_capacities(
     """
     if capacity_tolerance < 0:
         raise ValueError("Fixed-neighbor capacity tolerance must be non-negative.")
+    if bound_clip_tolerance is None:
+        bound_clip_tolerance = capacity_tolerance
+    if bound_clip_tolerance < 0:
+        raise ValueError(
+            "Fixed-neighbor bound clipping tolerance must be non-negative."
+        )
 
     manifest = pd.read_csv(manifest_path, dtype={"asset": str})
     required_columns = {
@@ -457,7 +464,7 @@ def materialize_fixed_neighbor_capacities(
                 ext_reference > ext_upper, 0.0
             )
             bound_delta = pd.concat([lower_delta, upper_delta], axis=1).max(axis=1)
-            material = bound_delta.gt(capacity_tolerance)
+            material = bound_delta.gt(bound_clip_tolerance)
             if material.any():
                 invalid = bound_delta.index[material]
                 details = pd.DataFrame(
@@ -468,12 +475,21 @@ def materialize_fixed_neighbor_capacities(
                         "lower_bound": ext_lower.loc[invalid].to_numpy(),
                         "upper_bound": ext_upper.loc[invalid].to_numpy(),
                         "delta": bound_delta.loc[invalid].to_numpy(),
-                        "allowed_tolerance": capacity_tolerance,
+                        "allowed_tolerance": bound_clip_tolerance,
                     }
                 ).to_string(index=False)
                 raise ValueError(
                     "Fixed-neighbor reference capacities exceed native nominal "
                     f"bounds by more than the allowed tolerance:\n{details}"
+                )
+            clipped_to_native_bound = bound_delta.gt(0.0)
+            if clipped_to_native_bound.any():
+                logger.info(
+                    "%s: clipping %s reference capacities to native nominal "
+                    "bounds within the %.6f MW bound tolerance.",
+                    component,
+                    int(clipped_to_native_bound.sum()),
+                    bound_clip_tolerance,
                 )
             # The former Linopy formulation fixed these variables inside a
             # reference +/- tolerance band. Materialize the upper edge so that
@@ -1615,6 +1631,10 @@ def prepare_network_before_model(n, snakemake):
         fixed_neighbor["domestic_country"],
         strict_asset_match=fixed_neighbor.get("strict_asset_match", True),
         capacity_tolerance=fixed_neighbor.get("capacity_tolerance", 0.01),
+        bound_clip_tolerance=fixed_neighbor.get(
+            "bound_clip_tolerance",
+            fixed_neighbor.get("capacity_tolerance", 0.01),
+        ),
     )
 
     configured_ledger = (
