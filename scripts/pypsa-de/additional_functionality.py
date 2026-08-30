@@ -221,6 +221,8 @@ def materialize_fixed_neighbor_capacities(
         nominal_attr,
         bus_columns,
     ) in FIXED_NEIGHBOR_COMPONENTS.items():
+        nominal_column = f"{nominal_attr}_nom"
+        extendable_column = f"{nominal_attr}_nom_extendable"
         component_targets = targets.loc[targets["component"].eq(component)].copy()
         if component_targets.empty:
             continue
@@ -231,6 +233,15 @@ def materialize_fixed_neighbor_capacities(
             )
 
         component_targets = component_targets.set_index("asset")
+        previous_component_targets = (
+            manifest.loc[
+                manifest["year"].lt(investment_year)
+                & manifest["component"].eq(component)
+            ]
+            .sort_values("year")
+            .drop_duplicates("asset", keep="last")
+            .set_index("asset")
+        )
         static = getattr(n, list_name)
         target_index = component_targets.index
         missing = target_index.difference(static.index)
@@ -249,11 +260,110 @@ def materialize_fixed_neighbor_capacities(
         ).intersection(static.index[active])
         unexpected = external_active.difference(target_index)
         if strict_asset_match and not unexpected.empty:
-            raise ValueError(
-                f"{component}: {len(unexpected)} active non-{domestic_country} assets "
-                "are absent from the reference manifest, e.g. "
-                f"{unexpected[:3].tolist()}."
+            original_unexpected = static.loc[unexpected, nominal_column].astype(float)
+            previous_reference = previous_component_targets.get(
+                "nominal", pd.Series(dtype=float)
+            ).reindex(unexpected)
+            # A tiny extendable investment can be materialized at the upper edge
+            # of the numerical band in one horizon and then survive brownfield
+            # transfer as a fixed asset. The endogenous reference drops it in the
+            # next horizon. Reconcile only assets whose previous reference target
+            # and carried capacity prove that exact numerical-residual history.
+            carried_upper = previous_reference + capacity_tolerance + 1e-3
+            numerical_residual = (
+                previous_reference.notna()
+                & previous_reference.ge(0.0)
+                & previous_reference.le(capacity_tolerance)
+                & np.isfinite(original_unexpected)
+                & original_unexpected.abs().le(carried_upper)
             )
+            residual_assets = numerical_residual.index[numerical_residual]
+            material_unexpected = unexpected.difference(residual_assets)
+            if not material_unexpected.empty:
+                details = pd.DataFrame(
+                    {
+                        "component": component,
+                        "asset": material_unexpected,
+                        "current_nominal": original_unexpected.reindex(
+                            material_unexpected
+                        ).to_numpy(),
+                        "previous_reference_nominal": previous_reference.reindex(
+                            material_unexpected
+                        ).to_numpy(),
+                        "allowed_carried_nominal": carried_upper.reindex(
+                            material_unexpected
+                        ).to_numpy(),
+                    }
+                ).to_string(index=False)
+                raise ValueError(
+                    f"{component}: {len(material_unexpected)} active non-"
+                    f"{domestic_country} assets are absent from the reference "
+                    "manifest and cannot be reconciled as tiny carried numerical "
+                    f"residuals:\n{details}"
+                )
+
+            if not residual_assets.empty:
+                residual_lower, residual_upper = _static_nominal_bounds(
+                    static, nominal_attr, residual_assets
+                )
+                residual_extendable = (
+                    static.loc[residual_assets, extendable_column]
+                    .fillna(False)
+                    .astype(bool)
+                )
+                residual_capital_cost = (
+                    static.get(
+                        "capital_cost",
+                        pd.Series(0.0, index=static.index, dtype=float),
+                    )
+                    .reindex(residual_assets)
+                    .fillna(0.0)
+                    .astype(float)
+                )
+                residual_countries = _asset_countries(
+                    n, static.loc[residual_assets], bus_columns
+                )
+                for asset in residual_assets:
+                    ledger_rows.append(
+                        {
+                            "year": investment_year,
+                            "component": component,
+                            "asset": asset,
+                            "countries": ";".join(
+                                sorted(residual_countries[asset])
+                            ),
+                            "nominal_attribute": nominal_attr,
+                            "original_nominal": original_unexpected.at[asset],
+                            "reference_nominal": 0.0,
+                            "operational_nominal": 0.0,
+                            "applied_nominal": 0.0,
+                            "native_lower_bound": residual_lower.at[asset],
+                            "native_upper_bound": residual_upper.at[asset],
+                            "bound_adjustment": 0.0,
+                            "operational_headroom_adjustment": 0.0,
+                            "was_extendable": residual_extendable.at[asset],
+                            "capital_cost": residual_capital_cost.at[asset],
+                            "removed_annualized_capex": 0.0,
+                        }
+                    )
+                pending_updates.append(
+                    (
+                        static,
+                        residual_assets,
+                        nominal_column,
+                        extendable_column,
+                        pd.Series(0.0, index=residual_assets, dtype=float),
+                    )
+                )
+                external_active = external_active.difference(residual_assets)
+                logger.info(
+                    "%s: pruned %s tiny carried non-%s assets absent from the "
+                    "%s reference manifest.",
+                    component,
+                    len(residual_assets),
+                    domestic_country,
+                    investment_year,
+                )
 
         inactive_targets = target_index.difference(static.index[active])
         if strict_asset_match and not inactive_targets.empty:
@@ -273,8 +383,6 @@ def materialize_fixed_neighbor_capacities(
         if assets.empty:
             continue
 
-        nominal_column = f"{nominal_attr}_nom"
-        extendable_column = f"{nominal_attr}_nom_extendable"
         reference = component_targets.loc[assets, "nominal"].astype(float)
         operational = component_targets.loc[assets, "operational_nominal"].astype(float)
         if not np.isfinite(reference).all():
