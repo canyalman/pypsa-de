@@ -56,11 +56,11 @@ def test_production_config_uses_approved_continuous_formulation():
     options = _production_options()
     costs = options["costs"]
 
-    assert (
-        config["run"]["prefix"]
-        == "caes_resc_continuous_fixed_nonde_static_4h_rte69_1h"
-    )
+    assert config["run"]["prefix"] == "storage_competition_fixed_nonde_1h"
     assert config["run"]["name"] == ["KN2045_Mix_FixedRenewables"]
+    assert config["solving"]["constraints"]["fixed_neighbor_capacities"][
+        "formulation"
+    ] == "static"
     assert options["round_trip_efficiency"] == 0.69
     assert options["minimum_output_duration_hours"] == 8
     assert options["maximum_output_duration_hours"] == 48
@@ -71,6 +71,13 @@ def test_production_config_uses_approved_continuous_formulation():
     assert costs["vom_usd2022_per_mwh_output"] == 1.05
     assert costs["capex_fit_sample_size"] == 18
     assert np.isclose(sum(options["site_output_capacities_twh"].values()), 7.6)
+
+    iron_air = config["electricity"]["storage_options"]["iron-air"]
+    assert "iron-air" in config["electricity"]["extendable_carriers"]["Store"]
+    assert iron_air["countries"] == ["DE"]
+    assert iron_air["duration_hours_at_rated_ac_output"] == 100.0
+    assert iron_air["charging_efficiency"] == 0.71
+    assert iron_air["discharging_efficiency"] == 0.60
 
 
 def test_attachment_maps_output_costs_and_geology_to_internal_units():
