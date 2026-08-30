@@ -22,6 +22,9 @@ EXTRACT_MODULE_PATH = (
     / "pypsa-de"
     / "extract_fixed_neighbor_capacities.py"
 )
+ADD_BROWNFIELD_MODULE_PATH = (
+    Path(__file__).parents[1] / "scripts" / "add_brownfield.py"
+)
 SPEC = importlib.util.spec_from_file_location("additional_functionality", MODULE_PATH)
 MODULE = importlib.util.module_from_spec(SPEC)
 PREPARE_SECTOR_NETWORK = "scripts.prepare_sector_network"
@@ -48,6 +51,33 @@ EXTRACT_SPEC = importlib.util.spec_from_file_location(
 )
 EXTRACT_MODULE = importlib.util.module_from_spec(EXTRACT_SPEC)
 EXTRACT_SPEC.loader.exec_module(EXTRACT_MODULE)
+
+ADD_ELECTRICITY = "scripts.add_electricity"
+ORIGINAL_ADD_ELECTRICITY = sys.modules.get(ADD_ELECTRICITY)
+add_electricity_stub = types.ModuleType(ADD_ELECTRICITY)
+add_electricity_stub.flatten = lambda values: values
+add_electricity_stub.sanitize_carriers = lambda *args, **kwargs: None
+sys.modules[ADD_ELECTRICITY] = add_electricity_stub
+ADD_EXISTING_BASEYEAR = "scripts.add_existing_baseyear"
+ORIGINAL_ADD_EXISTING_BASEYEAR = sys.modules.get(ADD_EXISTING_BASEYEAR)
+add_existing_baseyear_stub = types.ModuleType(ADD_EXISTING_BASEYEAR)
+add_existing_baseyear_stub.add_build_year_to_new_assets = lambda *args, **kwargs: None
+sys.modules[ADD_EXISTING_BASEYEAR] = add_existing_baseyear_stub
+try:
+    ADD_BROWNFIELD_SPEC = importlib.util.spec_from_file_location(
+        "add_brownfield", ADD_BROWNFIELD_MODULE_PATH
+    )
+    ADD_BROWNFIELD_MODULE = importlib.util.module_from_spec(ADD_BROWNFIELD_SPEC)
+    ADD_BROWNFIELD_SPEC.loader.exec_module(ADD_BROWNFIELD_MODULE)
+finally:
+    if ORIGINAL_ADD_ELECTRICITY is None:
+        del sys.modules[ADD_ELECTRICITY]
+    else:
+        sys.modules[ADD_ELECTRICITY] = ORIGINAL_ADD_ELECTRICITY
+    if ORIGINAL_ADD_EXISTING_BASEYEAR is None:
+        del sys.modules[ADD_EXISTING_BASEYEAR]
+    else:
+        sys.modules[ADD_EXISTING_BASEYEAR] = ORIGINAL_ADD_EXISTING_BASEYEAR
 
 
 def build_generator_model(
@@ -422,6 +452,7 @@ def test_static_formulation_materializes_all_components_and_leaves_de_free(tmp_p
         static = getattr(n, list_name)
         assert static.at[row.asset, f"{nominal_attr}_nom"] == pytest.approx(5.012)
         assert not static.at[row.asset, f"{nominal_attr}_nom_extendable"]
+        assert static.at[row.asset, MODULE.FIXED_NEIGHBOR_WAS_EXTENDABLE]
 
     assert n.generators.at["DE generator", "p_nom"] == pytest.approx(1.0)
     assert n.generators.at["DE generator", "p_nom_extendable"]
@@ -500,6 +531,28 @@ def test_static_formulation_uses_separate_native_bound_clip_tolerance(tmp_path):
     assert ledger.at[0, "bound_adjustment"] == pytest.approx(
         native_upper - reference
     )
+
+
+def test_static_original_extendability_marker_survives_netcdf_round_trip(tmp_path):
+    manifest = tmp_path / "manifest.csv"
+    write_static_generator_manifest(manifest, 5.0)
+    n = build_static_generator_network(p_nom_max=10.0)
+
+    MODULE.materialize_fixed_neighbor_capacities(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.012,
+    )
+    network_path = tmp_path / "network.nc"
+    n.export_to_netcdf(network_path)
+    loaded = pypsa.Network(network_path)
+
+    assert loaded.generators.at[
+        "BE generator", MODULE.FIXED_NEIGHBOR_WAS_EXTENDABLE
+    ]
+    assert not loaded.generators.at["BE generator", "p_nom_extendable"]
 
 
 def test_static_formulation_rejects_gap_above_native_bound_clip_tolerance(tmp_path):
@@ -657,6 +710,9 @@ def build_network_with_unexpected_carried_generator(carried_nominal):
         p_nom_max=10.0,
         capital_cost=3.0,
     )
+    n.generators.loc[
+        "BE tiny solar-2030", MODULE.FIXED_NEIGHBOR_WAS_EXTENDABLE
+    ] = True
     return n
 
 
@@ -744,6 +800,9 @@ def test_static_formulation_prunes_materialized_link_dropped_by_next_reference(
         p_nom_extendable=False,
         capital_cost=3.0,
     )
+    n.links.loc[
+        "DK process emissions CC-2030", MODULE.FIXED_NEIGHBOR_WAS_EXTENDABLE
+    ] = True
     n.add(
         "Link",
         "BE reference link-2035",
@@ -770,6 +829,80 @@ def test_static_formulation_prunes_materialized_link_dropped_by_next_reference(
     assert carried.original_nominal == pytest.approx(carried_nominal)
     assert carried.reference_nominal == pytest.approx(0.0)
     assert carried.applied_nominal == pytest.approx(0.0)
+
+
+def build_brownfield_networks_with_small_fixed_link(mark_as_originally_extendable):
+    n = pypsa.Network()
+    n_p = pypsa.Network()
+    for network in (n, n_p):
+        network.add("Bus", "GB bus", country="GB")
+        network.add("Bus", "NL bus", country="NL")
+
+    previous_asset = "H2 pipeline retrofitted GB bus -> NL bus-2030"
+    current_asset = "H2 pipeline retrofitted GB bus -> NL bus-2035"
+    n_p.add(
+        "Link",
+        previous_asset,
+        bus0="GB bus",
+        bus1="NL bus",
+        carrier="H2 pipeline retrofitted",
+        p_nom=5.0,
+        p_nom_extendable=False,
+        build_year=2030,
+        lifetime=50,
+    )
+    n_p.links.loc[previous_asset, "p_nom_opt"] = 5.0
+    n_p.links.loc[
+        previous_asset, MODULE.FIXED_NEIGHBOR_WAS_EXTENDABLE
+    ] = mark_as_originally_extendable
+    n.add(
+        "Link",
+        current_asset,
+        bus0="GB bus",
+        bus1="NL bus",
+        carrier="H2 pipeline retrofitted",
+        p_nom_extendable=True,
+        p_nom_max=100.0,
+        build_year=2035,
+        lifetime=50,
+    )
+    return n, n_p, previous_asset, current_asset
+
+
+def test_brownfield_prunes_materialized_small_link_before_h2_bound_update():
+    n, n_p, previous_asset, current_asset = (
+        build_brownfield_networks_with_small_fixed_link(True)
+    )
+
+    ADD_BROWNFIELD_MODULE.add_brownfield(
+        n,
+        n_p,
+        year=2035,
+        h2_retrofit=True,
+        h2_retrofit_capacity_per_ch4=1.0,
+        capacity_threshold=10.0,
+    )
+
+    assert previous_asset not in n.links.index
+    assert n.links.at[current_asset, "p_nom_max"] == pytest.approx(100.0)
+
+
+def test_brownfield_keeps_genuinely_fixed_small_link():
+    n, n_p, previous_asset, current_asset = (
+        build_brownfield_networks_with_small_fixed_link(False)
+    )
+
+    ADD_BROWNFIELD_MODULE.add_brownfield(
+        n,
+        n_p,
+        year=2035,
+        h2_retrofit=True,
+        h2_retrofit_capacity_per_ch4=1.0,
+        capacity_threshold=10.0,
+    )
+
+    assert previous_asset in n.links.index
+    assert n.links.at[current_asset, "p_nom_max"] == pytest.approx(95.0)
 
 
 def test_static_formulation_rejects_material_asset_absent_from_current_manifest(

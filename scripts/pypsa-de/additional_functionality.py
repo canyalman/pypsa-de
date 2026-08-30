@@ -10,6 +10,8 @@ from scripts.prepare_sector_network import determine_emission_sectors
 
 logger = logging.getLogger(__name__)
 
+FIXED_NEIGHBOR_WAS_EXTENDABLE = "fixed_neighbor_was_extendable"
+
 
 FIXED_NEIGHBOR_COMPONENTS = {
     "Generator": ("generators", "p", ("bus",)),
@@ -278,11 +280,16 @@ def materialize_fixed_neighbor_capacities(
             # previous target and carried capacity prove that exact history.
             carried_tolerance = max(capacity_tolerance, bound_clip_tolerance) + 1e-3
             carried_delta = (original_unexpected - previous_reference).abs()
+            materialized_in_previous_horizon = static.get(
+                FIXED_NEIGHBOR_WAS_EXTENDABLE,
+                pd.Series(False, index=static.index, dtype=bool),
+            ).reindex(unexpected, fill_value=False).astype("boolean")
             carried_reference_asset = (
                 previous_reference.notna()
                 & previous_reference.ge(0.0)
                 & np.isfinite(original_unexpected)
                 & ~static.loc[unexpected, extendable_column].fillna(False).astype(bool)
+                & materialized_in_previous_horizon.fillna(False).astype(bool)
                 & carried_delta.le(carried_tolerance)
             )
             carried_assets = carried_reference_asset.index[carried_reference_asset]
@@ -555,6 +562,14 @@ def materialize_fixed_neighbor_capacities(
         )
 
     for static, assets, nominal_column, extendable_column, applied in pending_updates:
+        originally_extendable = static.get(
+            FIXED_NEIGHBOR_WAS_EXTENDABLE,
+            pd.Series(False, index=static.index, dtype=bool),
+        ).astype("boolean").fillna(False).astype(bool)
+        originally_extendable.loc[assets] |= (
+            static.loc[assets, extendable_column].fillna(False).astype(bool)
+        )
+        static[FIXED_NEIGHBOR_WAS_EXTENDABLE] = originally_extendable
         static.loc[assets, nominal_column] = applied
         static.loc[assets, extendable_column] = False
 
