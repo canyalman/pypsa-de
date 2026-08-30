@@ -424,6 +424,51 @@ def test_static_formulation_clips_tiny_native_bound_residual(tmp_path):
     assert ledger.at[0, "bound_adjustment"] == pytest.approx(native_upper - reference)
 
 
+def test_static_formulation_uses_separate_native_bound_clip_tolerance(tmp_path):
+    native_upper = 6616.900971
+    reference = 6616.930672
+    manifest = tmp_path / "manifest.csv"
+    write_static_generator_manifest(manifest, reference)
+    n = build_static_generator_network(native_upper)
+
+    ledger = MODULE.materialize_fixed_neighbor_capacities(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.012,
+        bound_clip_tolerance=0.05,
+    )
+
+    assert n.generators.at["BE generator", "p_nom"] == pytest.approx(native_upper)
+    assert not n.generators.at["BE generator", "p_nom_extendable"]
+    assert ledger.at[0, "reference_nominal"] == pytest.approx(reference)
+    assert ledger.at[0, "applied_nominal"] == pytest.approx(native_upper)
+    assert ledger.at[0, "bound_adjustment"] == pytest.approx(
+        native_upper - reference
+    )
+
+
+def test_static_formulation_rejects_gap_above_native_bound_clip_tolerance(tmp_path):
+    native_upper = 100.0
+    manifest = tmp_path / "manifest.csv"
+    write_static_generator_manifest(manifest, 100.051)
+    n = build_static_generator_network(native_upper)
+
+    with pytest.raises(ValueError, match="exceed native nominal bounds"):
+        MODULE.materialize_fixed_neighbor_capacities(
+            n,
+            investment_year=2035,
+            manifest_path=manifest,
+            domestic_country="DE",
+            capacity_tolerance=0.012,
+            bound_clip_tolerance=0.05,
+        )
+
+    assert n.generators.at["BE generator", "p_nom"] == pytest.approx(0.0)
+    assert n.generators.at["BE generator", "p_nom_extendable"]
+
+
 def build_static_link_network():
     n = pypsa.Network()
     n.add("Bus", "AT gas", country="AT")
@@ -640,6 +685,7 @@ def test_static_pre_model_hook_writes_capex_ledger_and_summary(tmp_path):
                         "domestic_country": "DE",
                         "strict_asset_match": True,
                         "capacity_tolerance": 0.012,
+                        "bound_clip_tolerance": 0.05,
                     }
                 }
             }

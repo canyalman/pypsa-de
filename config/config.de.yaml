@@ -468,6 +468,10 @@ solving:
       # Formerly extendable capacities are materialized at the upper edge of
       # this numerical reference band, while native bounds remain enforced.
       capacity_tolerance: 0.012
+      # Clip only tiny reference/native-bound discrepancies. This is separate
+      # from the materialization headroom above and therefore does not enlarge
+      # every fixed non-DE capacity.
+      bound_clip_tolerance: 0.05
       capacity_manifest: resources/fixed_neighbor_endo_4h_3h_2025base_fixedgas_static_capacities.csv
       reference_networks:
         2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
