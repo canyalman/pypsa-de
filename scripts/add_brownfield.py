@@ -24,6 +24,22 @@ from scripts.add_existing_baseyear import add_build_year_to_new_assets
 
 logger = logging.getLogger(__name__)
 idx = pd.IndexSlice
+FIXED_NEIGHBOR_WAS_EXTENDABLE = "fixed_neighbor_was_extendable"
+
+
+def _originally_or_currently_extendable(static, nominal_attr):
+    """Return capacities that should retain extendable brownfield semantics."""
+    currently_extendable = static[f"{nominal_attr}_nom_extendable"].astype(
+        "boolean"
+    )
+    originally_extendable = static.get(
+        FIXED_NEIGHBOR_WAS_EXTENDABLE,
+        pd.Series(False, index=static.index, dtype=bool),
+    ).astype("boolean")
+    return (
+        currently_extendable.fillna(False).astype(bool)
+        | originally_extendable.fillna(False).astype(bool)
+    )
 
 
 def add_brownfield(
@@ -71,7 +87,7 @@ def add_brownfield(
     # battery portfolio used by the national duration constraint.
     battery_dischargers = n_p.links.index[
         (n_p.links.carrier == "battery discharger")
-        & n_p.links.p_nom_extendable
+        & _originally_or_currently_extendable(n_p.links, "p")
     ]
     battery_stores = pd.Index(
         [name.replace(" discharger", "") for name in battery_dischargers]
@@ -98,11 +114,13 @@ def add_brownfield(
             c.name, c.static.index[c.static.build_year + c.static.lifetime <= year]
         )
 
+        brownfield_extendable = _originally_or_currently_extendable(c.static, attr)
+
         # remove assets if their optimized nominal capacity is lower than a threshold
         # since CHP heat Link is proportional to CHP electric Link, make sure threshold is compatible
         chp_heat = c.static.index[
             (
-                c.static[f"{attr}_nom_extendable"]
+                brownfield_extendable
                 & c.static.index.str.contains("urban central")
             )
             & c.static.index.str.contains("CHP")
@@ -127,7 +145,7 @@ def add_brownfield(
         n_p.remove(
             c.name,
             c.static.index[
-                (c.static[f"{attr}_nom_extendable"] & ~c.static.index.isin(chp_heat))
+                (brownfield_extendable & ~c.static.index.isin(chp_heat))
                 & ~c.static.index.isin(paired_assets)
                 & (c.static[f"{attr}_nom_opt"] < capacity_threshold)
             ],
