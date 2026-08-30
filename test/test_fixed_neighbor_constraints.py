@@ -601,6 +601,83 @@ def test_static_formulation_canonicalizes_tiny_fixed_brownfield_residual(tmp_pat
     assert ledger.at[0, "removed_annualized_capex"] == pytest.approx(0.0)
 
 
+def build_network_with_unexpected_carried_generator(carried_nominal):
+    n = build_static_generator_network(p_nom_max=200.0, p_nom=1.0)
+    n.add(
+        "Generator",
+        "BE tiny solar-2030",
+        bus="BE bus",
+        p_nom=carried_nominal,
+        p_nom_extendable=False,
+        p_nom_max=10.0,
+        capital_cost=3.0,
+    )
+    return n
+
+
+def write_manifest_with_previous_tiny_generator(path, previous_nominal=0.003475):
+    pd.DataFrame(
+        [
+            (2030, "Generator", "BE tiny solar-2030", "p", previous_nominal, 0.0042),
+            (2035, "Generator", "BE generator", "p", 5.0, 5.0),
+        ],
+        columns=[
+            "year",
+            "component",
+            "asset",
+            "nominal_attribute",
+            "nominal",
+            "operational_nominal",
+        ],
+    ).to_csv(path, index=False)
+
+
+def test_static_formulation_prunes_tiny_carried_asset_absent_from_current_manifest(
+    tmp_path,
+):
+    manifest = tmp_path / "manifest.csv"
+    previous_nominal = 0.003475
+    write_manifest_with_previous_tiny_generator(manifest, previous_nominal)
+    n = build_network_with_unexpected_carried_generator(
+        carried_nominal=previous_nominal + 0.012
+    )
+
+    ledger = MODULE.materialize_fixed_neighbor_capacities(
+        n,
+        investment_year=2035,
+        manifest_path=manifest,
+        domestic_country="DE",
+        capacity_tolerance=0.012,
+    )
+
+    assert n.generators.at["BE tiny solar-2030", "p_nom"] == pytest.approx(0.0)
+    assert not n.generators.at["BE tiny solar-2030", "p_nom_extendable"]
+    residual = ledger.loc[ledger["asset"].eq("BE tiny solar-2030")].iloc[0]
+    assert residual.original_nominal == pytest.approx(previous_nominal + 0.012)
+    assert residual.reference_nominal == pytest.approx(0.0)
+    assert residual.applied_nominal == pytest.approx(0.0)
+
+
+def test_static_formulation_rejects_material_asset_absent_from_current_manifest(
+    tmp_path,
+):
+    manifest = tmp_path / "manifest.csv"
+    write_manifest_with_previous_tiny_generator(manifest)
+    n = build_network_with_unexpected_carried_generator(carried_nominal=0.1)
+
+    with pytest.raises(ValueError, match="cannot be reconciled"):
+        MODULE.materialize_fixed_neighbor_capacities(
+            n,
+            investment_year=2035,
+            manifest_path=manifest,
+            domestic_country="DE",
+            capacity_tolerance=0.012,
+        )
+
+    assert n.generators.at["BE tiny solar-2030", "p_nom"] == pytest.approx(0.1)
+    assert n.generators.at["BE generator", "p_nom"] == pytest.approx(1.0)
+
+
 def test_static_pre_model_hook_writes_capex_ledger_and_summary(tmp_path):
     manifest = tmp_path / "manifest.csv"
     write_static_generator_manifest(manifest, 5.0)
