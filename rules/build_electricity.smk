@@ -53,6 +53,12 @@ rule build_powerplants:
         custom_powerplants=config_provider("electricity", "custom_powerplants"),
         everywhere_powerplants=config_provider("electricity", "everywhere_powerplants"),
         countries=config_provider("countries"),
+        german_conventional_capacity_pathway=config_provider(
+            "german_conventional_capacity_pathway", default={}
+        ),
+        power_grouping_years=config_provider(
+            "existing_capacities", "grouping_years_power"
+        ),
     message:
         "Building powerplant list for {wildcards.clusters} clusters"
     script:
