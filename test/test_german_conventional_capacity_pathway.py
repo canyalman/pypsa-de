@@ -94,6 +94,46 @@ def test_2025_market_fleet_adds_small_mastr_chp(tmp_path):
     assert output_capacity(n, GERMAN_CONVENTIONAL_CARRIERS["lignite"]) == 121.0
 
 
+def test_2025_gas_capacity_can_be_fixed(tmp_path):
+    n = pypsa.Network()
+    n.add("Bus", "DE0", carrier="AC", country="DE", x=10.0, y=51.0)
+    add_output_link(n, "gas", "DE0", "CCGT", 100.0)
+    n.links.loc["gas", "p_nom_extendable"] = True
+
+    chp = pd.DataFrame(
+        columns=["Name", "Postleitzahl", "Fueltype", "Capacity", "DateIn", "DateOut"]
+    )
+    path = tmp_path / "german_chp.csv"
+    chp.to_csv(path, index=False)
+    pathway = {
+        "enable": True,
+        "fix_gas_capacity_2025": True,
+        "market_fleet_2025_mw": {
+            "gas": 100.0,
+            "hard_coal": 0.0,
+            "lignite": 0.0,
+        },
+    }
+
+    apply_german_conventional_capacity_pathway(n, pathway, 2025, path)
+
+    assert not n.links.loc["gas", "p_nom_extendable"]
+    assert n.links.loc["gas", "p_nom"] * n.links.loc["gas", "efficiency"] == 100.0
+
+
+def test_2025_gas_fix_does_not_apply_in_later_years():
+    n = pypsa.Network()
+    n.add("Bus", "DE0", carrier="AC", country="DE", x=10.0, y=51.0)
+    add_output_link(n, "gas", "DE0", "CCGT", 100.0)
+    n.links.loc["gas", "p_nom_extendable"] = True
+
+    apply_german_conventional_capacity_pathway(
+        n, {"enable": True, "fix_gas_capacity_2025": True}, 2030
+    )
+
+    assert n.links.loc["gas", "p_nom_extendable"]
+
+
 def test_lignite_is_allocated_only_to_survivor_buses():
     n = pypsa.Network()
     for bus, x in {"DE-west": 6.0, "DE-east-1": 12.0, "DE-east-2": 14.0}.items():
