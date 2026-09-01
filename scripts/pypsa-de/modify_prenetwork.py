@@ -1610,6 +1610,15 @@ def apply_german_conventional_capacity_pathway(
                 float(market_fleet[technology]),
                 float(small_chp[technology]),
             )
+        if pathway.get("fix_gas_capacity_2025", False):
+            gas_i = _german_links_by_carrier(
+                n, GERMAN_CONVENTIONAL_CARRIERS["gas"]
+            )
+            n.links.loc[gas_i, "p_nom_extendable"] = False
+            logger.info(
+                "Fixed %d German gas assets at their calibrated 2025 capacities.",
+                len(gas_i),
+            )
         return
 
     hard_coal_target = pathway.get("hard_coal_mw", {}).get(year)
