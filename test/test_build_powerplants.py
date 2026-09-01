@@ -19,6 +19,7 @@ from build_powerplants import (
     add_custom_powerplants,
     replace_natural_gas_fueltype,
     replace_natural_gas_technology,
+    retain_german_lignite_market_fleet,
 )
 
 path_cwd = pathlib.Path.cwd()
@@ -147,3 +148,52 @@ def test_replace_natural_gas_fueltype():
     modified_df = input_df.assign(Fueltype=replace_natural_gas_fueltype)
     comparison_df = modified_df.compare(reference_df)
     assert comparison_df.empty
+
+
+def test_retain_german_lignite_market_fleet_restores_only_reported_stock():
+    source = pd.DataFrame(
+        {
+            "Name": ["DE large", "DE small", "DE retired", "PL large"],
+            "Country": ["DE", "DE", "DE", "PL"],
+            "Fueltype": ["Lignite"] * 4,
+            "Set": ["CHP"] * 4,
+            "Technology": [np.nan] * 4,
+            "Capacity": [500.0, 9.0, 400.0, 600.0],
+            "DateIn": [1917.0, 2000.0, 2000.0, 2000.0],
+            "DateOut": [2035.0, 2035.0, 2025.0, 2035.0],
+        }
+    )
+    filtered = source.loc[source.Country.eq("PL")].copy()
+    pathway = {
+        "enable": True,
+        "market_fleet_2025_mw": {"lignite": 14700},
+        "add_mastr_chp_below_mw": 10,
+    }
+
+    result = retain_german_lignite_market_fleet(
+        filtered, source, pathway, first_grouping_year=1920
+    )
+
+    restored = result.loc[result.Country.eq("DE")]
+    assert restored.Name.tolist() == ["DE large"]
+    assert restored.Set.tolist() == ["PP"]
+    assert restored.Technology.tolist() == ["Steam Turbine"]
+    assert restored.DateIn.tolist() == [1920.0]
+    assert result.loc[result.Country.eq("PL"), "Name"].tolist() == ["PL large"]
+
+
+def test_retain_german_lignite_market_fleet_is_disabled_without_pathway():
+    source = pd.DataFrame(
+        {
+            "Country": ["DE"],
+            "Fueltype": ["Lignite"],
+            "Capacity": [500.0],
+            "DateIn": [2000.0],
+            "DateOut": [2035.0],
+        }
+    )
+    filtered = source.iloc[0:0].copy()
+
+    result = retain_german_lignite_market_fleet(filtered, source, {})
+
+    assert result.empty
