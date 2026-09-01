@@ -149,6 +149,7 @@ def clean_data(combustion, biomass, geodata):
         "DateOut",
         "lat",
         "lon",
+        "Postleitzahl",
         "Capacity_thermal",
         "Industry",
     ]

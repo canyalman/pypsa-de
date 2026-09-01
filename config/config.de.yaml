@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: endo_4h_1h
+  prefix: endo_4h_3h_2025base
   name:
   # - ExPol
   # - KN2045_Mix
@@ -239,7 +239,7 @@ clustering:
     # 'ES': 0.0408
     # 'IT': 0.0408
   temporal:
-    resolution_sector: 1H
+    resolution_sector: 3H
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#co2-budget
 co2_budget:
@@ -706,11 +706,43 @@ offshore_nep_force:
   cutout_year: 2030
   delay_years: 2
 
-scale_capacity:
-  2020:
-    DE:
-      CCGT: 10000
-      "urban central gas CHP": 22000
+scale_capacity: {}
+
+# Existing German conventional capacity is calibrated in electricity-output MW.
+# The 2025 market-fleet values are from BNetzA's 2025/26 Netzreserve report,
+# Table 1. That table excludes CHP below 10 MW; those MaStR units are retained
+# separately by the workflow. Coal targets follow the statutory 2038 phase-out
+# pathway (KVBG and BNetzA Monitoringbericht 2025, Figure 3-23).
+# Sources:
+# https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/Versorgungssicherheit/Netzreserve/DL/Netzreservebedarf_2025.pdf
+# https://www.gesetze-im-internet.de/kvbg/BJNR181810020.html
+# https://www.bundesnetzagentur.de/SharedDocs/Downloads/DE/Sachgebiete/Energie/Unternehmen_Institutionen/MonitoringEnergiederZukunft/monitoringbericht_2025.pdf
+german_conventional_capacity_pathway:
+  enable: true
+  market_fleet_2025_mw:
+    gas: 27758
+    hard_coal: 8621
+    lignite: 14700
+  add_mastr_chp_below_mw: 10
+  hard_coal_mw:
+    2030: 8000
+    2035: 0
+  lignite_mw:
+    2030: 6280
+    2035: 4747
+  # Coordinates are the PPM/MaStR plant locations. Official block capacities
+  # provide spatial weights; the 2030 small-lignite residual is distributed
+  # over these surviving eastern German sites.
+  lignite_sites:
+    2030:
+      Schkopau: {lat: 51.3985, lon: 11.9504, capacity_mw: 900}
+      Lippendorf: {lat: 51.1832, lon: 12.3717, capacity_mw: 1750}
+      Schwarze_Pumpe: {lat: 51.5354, lon: 14.3538, capacity_mw: 1500}
+      Boxberg: {lat: 51.4188, lon: 14.5743, capacity_mw: 1497}
+    2035:
+      Lippendorf: {lat: 51.1832, lon: 12.3717, capacity_mw: 1750}
+      Schwarze_Pumpe: {lat: 51.5354, lon: 14.3538, capacity_mw: 1500}
+      Boxberg: {lat: 51.4188, lon: 14.5743, capacity_mw: 1497}
 
 data:
   ariadne_database:

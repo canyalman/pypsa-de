@@ -214,6 +214,7 @@ rule modify_prenetwork:
         regions_offshore=resources("regions_offshore_base_s_{clusters}.geojson"),
         offshore_connection_points="data/pypsa-de/offshore_connection_points.csv",
         new_industrial_energy_demand="data/pypsa-de/UBA_Projektionsbericht2025_Abbildung31_MWMS.csv",
+        german_chp=resources("german_chp_base_s_{clusters}.csv"),
     output:
         network=resources(
             "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_final.nc"
@@ -250,6 +251,9 @@ rule modify_prenetwork:
         shipping_oil_efficiency=config_provider("sector", "shipping_oil_efficiency"),
         shipping_methanol_share=config_provider("sector", "shipping_methanol_share"),
         scale_capacity=config_provider("scale_capacity"),
+        german_conventional_capacity_pathway=config_provider(
+            "german_conventional_capacity_pathway"
+        ),
         bev_charge_rate=config_provider("sector", "bev_charge_rate"),
         bev_energy=config_provider("sector", "bev_energy"),
         bev_dsm_availability=config_provider("sector", "bev_dsm_availability"),

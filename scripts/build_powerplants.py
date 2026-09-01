@@ -144,6 +144,76 @@ def replace_natural_gas_fueltype(df: pd.DataFrame) -> pd.Series:
     )
 
 
+def retain_german_lignite_market_fleet(
+    filtered_ppl: pd.DataFrame,
+    source_ppl: pd.DataFrame,
+    pathway: dict,
+    first_grouping_year: int | None = None,
+) -> pd.DataFrame:
+    """
+    Retain German market lignite plants as electricity-only stock seeds.
+
+    Powerplantmatching labels most large German lignite stations as CHP. The
+    German workflow otherwise removes all German PPM CHP entries in favour of
+    the MaStR CHP dataset, which leaves no electricity-only lignite fleet to
+    calibrate. Here the active PPM entries above the BNetzA reporting threshold
+    are restored as PP entries to preserve their locations and phase-out dates.
+    Their aggregate capacity is calibrated to the official BNetzA market-fleet
+    total later in ``modify_prenetwork``.
+    """
+    if not pathway or not pathway.get("enable", False):
+        return filtered_ppl
+
+    market_fleet = pathway.get("market_fleet_2025_mw", {})
+    if "lignite" not in market_fleet:
+        return filtered_ppl
+
+    year = int(pathway.get("market_fleet_year", 2025))
+    threshold_mw = float(pathway.get("add_mastr_chp_below_mw", 10.0))
+    date_in = pd.to_numeric(source_ppl["DateIn"], errors="coerce")
+    date_out = pd.to_numeric(source_ppl["DateOut"], errors="coerce")
+    capacity = pd.to_numeric(source_ppl["Capacity"], errors="coerce").fillna(0.0)
+    lignite = (
+        source_ppl["Country"].eq("DE")
+        & source_ppl["Fueltype"].eq("Lignite")
+        & capacity.ge(threshold_mw)
+        & (date_in.isna() | date_in.le(year))
+        & (date_out.isna() | date_out.gt(year))
+    )
+    restored = source_ppl.loc[lignite].copy()
+    if restored.empty:
+        raise ValueError("No active German lignite market plants found in PPM data.")
+
+    # These rows seed the electricity fleet. MaStR still supplies the explicit
+    # CHP links, and the later aggregate calibration prevents double counting.
+    restored["Set"] = "PP"
+    restored["Technology"] = restored["Technology"].fillna("Steam Turbine")
+    if first_grouping_year is not None:
+        restored["DateIn"] = pd.to_numeric(
+            restored["DateIn"], errors="coerce"
+        ).clip(lower=first_grouping_year)
+
+    replace = (
+        filtered_ppl["Country"].eq("DE")
+        & filtered_ppl["Fueltype"].eq("Lignite")
+        & pd.to_numeric(filtered_ppl["Capacity"], errors="coerce")
+        .fillna(0.0)
+        .ge(threshold_mw)
+    )
+    result = pd.concat(
+        [filtered_ppl.loc[~replace], restored],
+        sort=False,
+        ignore_index=True,
+        verify_integrity=True,
+    )
+    logger.info(
+        "Restored %d German PPM lignite market-fleet records (%.3f MW before official calibration).",
+        len(restored),
+        restored["Capacity"].sum(),
+    )
+    return result
+
+
 def fill_unoccupied_holes(gdf: gpd.GeoDataFrame) -> gpd.GeoSeries:
     def _fill_poly(poly, idx):
         if not poly.interiors:
@@ -236,9 +306,17 @@ if __name__ == "__main__":
         .replace({"Solid Biomass": "Bioenergy", "Biogas": "Bioenergy"})
     )
 
+    source_ppl = ppl.copy()
     ppl_query = snakemake.params.powerplants_filter
     if isinstance(ppl_query, str):
         ppl.query(ppl_query, inplace=True)
+
+    ppl = retain_german_lignite_market_fleet(
+        ppl,
+        source_ppl,
+        snakemake.params.german_conventional_capacity_pathway,
+        min(snakemake.params.power_grouping_years),
+    )
 
     # add carriers from own powerplant files:
     custom_ppl_query = snakemake.params.custom_powerplants
