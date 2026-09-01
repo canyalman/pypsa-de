@@ -1407,6 +1407,228 @@ def scale_capacity(n, scaling):
                 ]
 
 
+GERMAN_CONVENTIONAL_CARRIERS = {
+    "gas": ["CCGT", "OCGT", "urban central gas CHP"],
+    "hard_coal": ["coal", "urban central coal CHP"],
+    "lignite": ["lignite", "urban central lignite CHP"],
+}
+
+
+def _german_links_by_carrier(n, carriers):
+    """Return German electricity-producing Links for the requested carriers."""
+    bus_country = n.links.bus1.map(n.buses.country)
+    missing_country = bus_country.isna()
+    bus_country.loc[missing_country] = n.links.loc[missing_country, "bus1"].str[:2]
+    return n.links.index[(bus_country == "DE") & n.links.carrier.isin(carriers)]
+
+
+def _set_link_output_capacities(n, output_mw):
+    """Set Link input capacity from desired electrical output capacity."""
+    output_mw = output_mw.astype(float)
+    efficiency = n.links.loc[output_mw.index, "efficiency"]
+    if efficiency.isna().any() or (efficiency <= 0).any():
+        invalid = efficiency.index[efficiency.isna() | (efficiency <= 0)].tolist()
+        raise ValueError(f"Invalid electrical efficiency for Links: {invalid}")
+
+    p_nom = output_mw / efficiency
+    n.links.loc[p_nom.index, "p_nom"] = p_nom
+
+    extendable = n.links.loc[p_nom.index, "p_nom_extendable"]
+    if extendable.any():
+        extendable_i = extendable.index[extendable]
+        n.links.loc[extendable_i, "p_nom_min"] = p_nom.loc[extendable_i]
+        finite_max = n.links.loc[extendable_i, "p_nom_max"].replace(np.inf, np.nan)
+        below = finite_max.notna() & finite_max.lt(p_nom.loc[extendable_i])
+        if below.any():
+            below_i = below.index[below]
+            n.links.loc[below_i, "p_nom_max"] = p_nom.loc[below_i]
+
+
+def scale_german_conventional_output(n, carriers, target_mw, label):
+    """Scale an existing German Link fleet to an electrical-output target."""
+    links_i = _german_links_by_carrier(n, carriers)
+    if links_i.empty:
+        if np.isclose(target_mw, 0.0):
+            return
+        raise ValueError(f"No German Links found for {label}: {carriers}")
+
+    if np.isclose(target_mw, 0.0):
+        _set_link_output_capacities(n, pd.Series(0.0, index=links_i))
+        n.links.loc[links_i, "p_nom_min"] = 0.0
+        n.links.loc[links_i, "p_nom_max"] = 0.0
+        n.links.loc[links_i, "p_nom_extendable"] = False
+        logger.info("Set German %s capacity to zero.", label)
+        return
+
+    current_output = n.links.loc[links_i].eval("p_nom * efficiency")
+    existing_i = current_output.index[current_output > 0]
+    current_total = current_output.loc[existing_i].sum()
+    if current_total <= 0:
+        raise ValueError(f"Cannot scale German {label}: current capacity is zero.")
+
+    desired = current_output.loc[existing_i] * target_mw / current_total
+    _set_link_output_capacities(n, desired)
+    logger.info(
+        "Scaled German %s electricity-output capacity from %.3f MW to %.3f MW.",
+        label,
+        current_total,
+        target_mw,
+    )
+
+
+def calibrate_2025_german_market_fleet(n, technology, official_mw, small_chp_mw):
+    """Preserve MaStR CHP and calibrate power-only plants to the fleet total."""
+    carriers = GERMAN_CONVENTIONAL_CARRIERS[technology]
+    chp_carriers = [carrier for carrier in carriers if "CHP" in carrier]
+    power_only_carriers = [carrier for carrier in carriers if carrier not in chp_carriers]
+    chp_i = _german_links_by_carrier(n, chp_carriers)
+    chp_output_mw = n.links.loc[chp_i].eval("p_nom * efficiency").sum()
+    total_target_mw = official_mw + small_chp_mw
+    power_only_target_mw = total_target_mw - chp_output_mw
+    if power_only_target_mw < -1e-6:
+        raise ValueError(
+            f"German {technology} CHP capacity ({chp_output_mw:.3f} MW) exceeds "
+            f"the 2025 total target ({total_target_mw:.3f} MW)."
+        )
+
+    scale_german_conventional_output(
+        n,
+        power_only_carriers,
+        max(power_only_target_mw, 0.0),
+        f"power-only {technology}",
+    )
+    logger.info(
+        "German 2025 %s total: %.3f MW power-only + %.3f MW unchanged MaStR CHP = %.3f MW.",
+        technology,
+        max(power_only_target_mw, 0.0),
+        chp_output_mw,
+        total_target_mw,
+    )
+
+
+def _small_mastr_chp_capacity(german_chp_file, year, threshold_mw):
+    """Return MaStR CHP capacity outside BNetzA's >=10 MW market-fleet scope."""
+    chp = pd.read_csv(german_chp_file)
+    if chp.empty:
+        return pd.Series(0.0, index=GERMAN_CONVENTIONAL_CARRIERS)
+
+    chp["DateIn"] = pd.to_numeric(chp["DateIn"], errors="coerce")
+    chp["DateOut"] = pd.to_numeric(chp["DateOut"], errors="coerce")
+    chp["Capacity"] = pd.to_numeric(chp["Capacity"], errors="coerce").fillna(0.0)
+    active = chp["DateIn"].isna() | chp["DateIn"].le(year)
+    active &= chp["DateOut"].isna() | chp["DateOut"].ge(year)
+    chp = chp.loc[active].copy()
+
+    site_columns = [column for column in ["Fueltype", "Postleitzahl", "Name"] if column in chp]
+    sites = chp.groupby(site_columns, dropna=False, as_index=False)["Capacity"].sum()
+    sites = sites.loc[sites.Capacity < threshold_mw]
+    fuel_map = {"Natural Gas": "gas", "Coal": "hard_coal", "Lignite": "lignite"}
+    result = sites.assign(technology=sites.Fueltype.map(fuel_map)).groupby(
+        "technology"
+    ).Capacity.sum()
+    return result.reindex(GERMAN_CONVENTIONAL_CARRIERS, fill_value=0.0)
+
+
+def allocate_german_lignite_to_sites(n, target_mw, sites):
+    """Allocate lignite output capacity to the nearest surviving host buses."""
+    links_i = _german_links_by_carrier(
+        n, GERMAN_CONVENTIONAL_CARRIERS["lignite"]
+    )
+    current_output = n.links.loc[links_i].eval("p_nom * efficiency")
+    host_i = current_output.index[current_output > 0]
+    if host_i.empty:
+        raise ValueError("Cannot allocate German lignite: current capacity is zero.")
+
+    host_buses = n.links.loc[host_i, "bus1"].unique()
+    bus_coordinates = n.buses.loc[host_buses, ["x", "y"]].astype(float)
+    if bus_coordinates.isna().any().any():
+        raise ValueError("Missing coordinates for German lignite host buses.")
+
+    site_weights = pd.Series(
+        {name: float(values["capacity_mw"]) for name, values in sites.items()}
+    )
+    if site_weights.empty or site_weights.sum() <= 0:
+        raise ValueError("Lignite site weights must sum to a positive value.")
+
+    desired_by_bus = pd.Series(dtype=float)
+    for name, values in sites.items():
+        distance = (
+            (bus_coordinates.x - float(values["lon"])) ** 2
+            + (bus_coordinates.y - float(values["lat"])) ** 2
+        )
+        bus = distance.idxmin()
+        desired_by_bus.loc[bus] = desired_by_bus.get(bus, 0.0) + (
+            target_mw * float(values["capacity_mw"]) / site_weights.sum()
+        )
+        logger.info("Mapped lignite site %s to model bus %s.", name, bus)
+
+    desired = pd.Series(0.0, index=links_i)
+    for bus, bus_target in desired_by_bus.items():
+        bus_i = host_i[n.links.loc[host_i, "bus1"].eq(bus)]
+        bus_output = current_output.loc[bus_i]
+        if bus_output.sum() <= 0:
+            raise ValueError(f"No lignite capacity available at survivor bus {bus}.")
+        desired.loc[bus_i] = bus_output * bus_target / bus_output.sum()
+
+    _set_link_output_capacities(n, desired)
+    n.links.loc[links_i, "p_nom_min"] = np.minimum(
+        n.links.loc[links_i, "p_nom_min"], n.links.loc[links_i, "p_nom"]
+    )
+    logger.info(
+        "Allocated %.3f MW of German lignite electricity-output capacity to %d survivor buses.",
+        target_mw,
+        len(desired_by_bus),
+    )
+
+
+def apply_german_conventional_capacity_pathway(
+    n, pathway, year, german_chp_file=None
+):
+    """Apply the official-scope 2025 fleet and policy-consistent coal pathway."""
+    if not pathway or not pathway.get("enable", False):
+        return
+
+    if year == 2025:
+        market_fleet = pathway["market_fleet_2025_mw"]
+        threshold = float(pathway.get("add_mastr_chp_below_mw", 0.0))
+        small_chp = (
+            _small_mastr_chp_capacity(german_chp_file, year, threshold)
+            if threshold and german_chp_file
+            else pd.Series(0.0, index=GERMAN_CONVENTIONAL_CARRIERS)
+        )
+        for technology in GERMAN_CONVENTIONAL_CARRIERS:
+            logger.info(
+                "German 2025 %s target: %.3f MW official market fleet + %.3f MW MaStR CHP below %.1f MW.",
+                technology,
+                float(market_fleet[technology]),
+                float(small_chp[technology]),
+                threshold,
+            )
+            calibrate_2025_german_market_fleet(
+                n,
+                technology,
+                float(market_fleet[technology]),
+                float(small_chp[technology]),
+            )
+        return
+
+    hard_coal_target = pathway.get("hard_coal_mw", {}).get(year)
+    if hard_coal_target is not None:
+        scale_german_conventional_output(
+            n,
+            GERMAN_CONVENTIONAL_CARRIERS["hard_coal"],
+            float(hard_coal_target),
+            "hard_coal",
+        )
+
+    lignite_target = pathway.get("lignite_mw", {}).get(year)
+    lignite_sites = pathway.get("lignite_sites", {}).get(year)
+    if lignite_target is not None:
+        if not lignite_sites:
+            raise ValueError(f"Missing lignite survivor sites for {year}.")
+        allocate_german_lignite_to_sites(n, float(lignite_target), lignite_sites)
+
+
 def limit_cross_border_flows_ac(n, s_max_pu):
     logger.info(
         f"Limiting AC cross-border flows between all countries to {s_max_pu} of maximum capacity."
@@ -1489,6 +1711,13 @@ if __name__ == "__main__":
     force_connection_nep_offshore(n, current_year, costs)
 
     scale_capacity(n, snakemake.params.scale_capacity)
+
+    apply_german_conventional_capacity_pathway(
+        n,
+        snakemake.params.german_conventional_capacity_pathway,
+        current_year,
+        snakemake.input.german_chp,
+    )
 
     sanitize_custom_columns(n)
 
