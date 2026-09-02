@@ -176,3 +176,56 @@ rule solve_sector_network_myopic:
         "Solving sector-coupled network with myopic foresight for {wildcards.clusters} clusters, {wildcards.planning_horizons} planning horizons, {wildcards.opts} electric options and {wildcards.sector_opts} sector options"
     script:
         scripts("solve_network.py")
+
+
+common_reference_history = config.get("common_reference_history", {})
+
+if common_reference_history.get("enable", False):
+    common_baseyear = config["scenario"]["planning_horizons"][0]
+
+    rule reuse_common_reference_baseyear:
+        input:
+            reference_network=common_reference_history["reference_networks"][
+                common_baseyear
+            ],
+        output:
+            network=RESULTS
+            + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+        wildcard_constraints:
+            planning_horizons=str(common_baseyear),
+        message:
+            "Reusing the common endogenous base-year network for {wildcards.run}"
+        script:
+            scripts("pypsa-de/reuse_reference_network.py")
+
+
+    ruleorder: reuse_common_reference_baseyear > solve_sector_network_myopic
+
+    common_reference_horizons = [
+        str(year)
+        for year in common_reference_history.get("reuse_reference_horizons", [])
+    ]
+    common_reference_runs = common_reference_history.get(
+        "reuse_reference_runs", []
+    )
+
+    if common_reference_horizons and common_reference_runs:
+
+        rule reuse_common_reference_horizon:
+            input:
+                reference_network=lambda w: common_reference_history[
+                    "reference_networks"
+                ][int(w.planning_horizons)],
+            output:
+                network=RESULTS
+                + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
+            wildcard_constraints:
+                planning_horizons="|".join(common_reference_horizons),
+                run="|".join(common_reference_runs),
+            message:
+                "Reusing the common endogenous network for {wildcards.run} in {wildcards.planning_horizons}"
+            script:
+                scripts("pypsa-de/reuse_reference_network.py")
+
+
+        ruleorder: reuse_common_reference_horizon > solve_sector_network_myopic
