@@ -464,9 +464,9 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
-    # Materialize all non-German nominal capacities from the hourly endogenous
-    # 4h reference before model creation. Dispatch, cross-border flows, and all
-    # German endogenous capacity decisions remain free.
+    # Materialize all non-German nominal capacities from the calibrated 3h
+    # endogenous 4h reference before model creation. Dispatch, cross-border
+    # flows, and all German endogenous capacity decisions remain free.
     fixed_neighbor_capacities:
       enable: true
       formulation: static
@@ -475,11 +475,11 @@ solving:
       # Tiny reference/native-bound and dispatch-to-nominal residuals are
       # reconciled before capacities are converted to fixed network data.
       capacity_tolerance: 0.012
-      capacity_manifest: resources/fixed_neighbor_endo_4h_1h_static_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_endo_4h_3h_2025base_fixedgas_static_capacities.csv
       reference_networks:
-        2025: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/endo_4h_1h_2026-08-18/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
       # Reuse the endogenous reference history through 2030; solve only 2035 anew.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
