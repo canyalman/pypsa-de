@@ -280,10 +280,14 @@ def materialize_fixed_neighbor_capacities(
             # previous target and carried capacity prove that exact history.
             carried_tolerance = max(capacity_tolerance, bound_clip_tolerance) + 1e-3
             carried_delta = (original_unexpected - previous_reference).abs()
-            materialized_in_previous_horizon = static.get(
-                FIXED_NEIGHBOR_WAS_EXTENDABLE,
-                pd.Series(False, index=static.index, dtype=bool),
-            ).reindex(unexpected, fill_value=False).astype("boolean")
+            materialized_in_previous_horizon = (
+                static.get(
+                    FIXED_NEIGHBOR_WAS_EXTENDABLE,
+                    pd.Series(False, index=static.index, dtype=bool),
+                )
+                .reindex(unexpected, fill_value=False)
+                .astype("boolean")
+            )
             carried_reference_asset = (
                 previous_reference.notna()
                 & previous_reference.ge(0.0)
@@ -345,9 +349,7 @@ def materialize_fixed_neighbor_capacities(
                             "year": investment_year,
                             "component": component,
                             "asset": asset,
-                            "countries": ";".join(
-                                sorted(residual_countries[asset])
-                            ),
+                            "countries": ";".join(sorted(residual_countries[asset])),
                             "nominal_attribute": nominal_attr,
                             "original_nominal": original_unexpected.at[asset],
                             "reference_nominal": 0.0,
@@ -505,9 +507,9 @@ def materialize_fixed_neighbor_capacities(
             # eliminating the capacity variables does not also eliminate the
             # small aggregate feasibility margin used by the solved model.
             numerical_upper = reference.loc[extendable_assets] + capacity_tolerance
-            numerical_upper = pd.concat(
-                [numerical_upper, ext_reference], axis=1
-            ).max(axis=1)
+            numerical_upper = pd.concat([numerical_upper, ext_reference], axis=1).max(
+                axis=1
+            )
             applied.loc[extendable_assets] = numerical_upper.clip(
                 lower=ext_lower, upper=ext_upper
             )
@@ -562,10 +564,15 @@ def materialize_fixed_neighbor_capacities(
         )
 
     for static, assets, nominal_column, extendable_column, applied in pending_updates:
-        originally_extendable = static.get(
-            FIXED_NEIGHBOR_WAS_EXTENDABLE,
-            pd.Series(False, index=static.index, dtype=bool),
-        ).astype("boolean").fillna(False).astype(bool)
+        originally_extendable = (
+            static.get(
+                FIXED_NEIGHBOR_WAS_EXTENDABLE,
+                pd.Series(False, index=static.index, dtype=bool),
+            )
+            .astype("boolean")
+            .fillna(False)
+            .astype(bool)
+        )
         originally_extendable.loc[assets] |= (
             static.loc[assets, extendable_column].fillna(False).astype(bool)
         )
@@ -803,6 +810,108 @@ def add_fixed_neighbor_capacity_constraints(
         investment_year,
         len(bound_report),
         capacity_tolerance,
+    )
+
+
+def add_continuous_acaes_constraints(n, options):
+    """Link continuous A-CAES power, output duration, and geology conventions."""
+    if not options or not options.get("enable", False):
+        return
+
+    carrier = str(options["carrier"])
+    charger_carrier = f"{carrier} charge"
+    discharger_carrier = f"{carrier} discharge"
+    site_output_twh = pd.Series(options["site_output_capacities_twh"], dtype=float)
+    national_output_twh = float(options["geological_output_capacity_twh"])
+    if not np.isclose(site_output_twh.sum(), national_output_twh):
+        raise ValueError(
+            "Continuous A-CAES regional geological limits do not sum to the "
+            "national cap."
+        )
+
+    round_trip_efficiency = float(options["round_trip_efficiency"])
+    if options["efficiency_split"] != "symmetric":
+        raise ValueError("Continuous A-CAES requires a symmetric efficiency split.")
+    efficiency_dispatch = np.sqrt(round_trip_efficiency)
+    if not np.isclose(float(options["charge_to_discharge_power_ratio"]), 1.0):
+        raise ValueError(
+            "Continuous A-CAES requires a 1:1 grid-side charging-to-discharging "
+            "power ratio."
+        )
+
+    minimum_duration = float(options["minimum_output_duration_hours"])
+    maximum_duration = float(options["maximum_output_duration_hours"])
+    if minimum_duration <= 0 or maximum_duration < minimum_duration:
+        raise ValueError("Continuous A-CAES output-duration bounds are invalid.")
+
+    acaes_stores = n.stores.index[n.stores.carrier.eq(carrier)]
+    acaes_chargers = n.links.index[n.links.carrier.eq(charger_carrier)]
+    acaes_dischargers = n.links.index[n.links.carrier.eq(discharger_carrier)]
+    if len(acaes_stores) != len(site_output_twh):
+        raise ValueError(
+            "Continuous A-CAES is enabled but the expected regional Stores do "
+            "not exist."
+        )
+    if len(acaes_chargers) != len(site_output_twh) or len(acaes_dischargers) != len(
+        site_output_twh
+    ):
+        raise ValueError(
+            "Continuous A-CAES is enabled but the expected charging/discharging "
+            "Links do not exist."
+        )
+
+    link_p_nom = n.model["Link-p_nom"]
+    store_e_nom = n.model["Store-e_nom"]
+    for site, output_cap_twh in site_output_twh.items():
+        store = f"{site} {carrier}"
+        charger = f"{store} charger"
+        discharger = f"{store} discharger"
+        missing = [
+            name
+            for name, index in (
+                (store, acaes_stores),
+                (charger, acaes_chargers),
+                (discharger, acaes_dischargers),
+            )
+            if name not in index
+        ]
+        if missing:
+            raise ValueError(
+                f"Continuous A-CAES components are missing at {site}: {missing}."
+            )
+
+        # Charger p_nom is grid input. Discharger p_nom is internal input, so
+        # eta_d * discharger p_nom is grid output. The equality imposes the
+        # approved 1:1 ratio between both grid-side power capacities.
+        charge_power = link_p_nom.loc[[charger]].sum()
+        discharge_power_internal = link_p_nom.loc[[discharger]].sum()
+        energy_internal = store_e_nom.loc[[store]].sum()
+        output_energy = efficiency_dispatch * energy_internal
+
+        n.model.add_constraints(
+            charge_power == efficiency_dispatch * discharge_power_internal,
+            name=f"Link-aCAES-grid-power-ratio-{site}",
+        )
+        n.model.add_constraints(
+            output_energy >= minimum_duration * charge_power,
+            name=f"Store-aCAES-minimum-output-duration-{site}",
+        )
+        n.model.add_constraints(
+            output_energy <= maximum_duration * charge_power,
+            name=f"Store-aCAES-maximum-output-duration-{site}",
+        )
+        n.model.add_constraints(
+            output_energy <= float(output_cap_twh) * 1e6,
+            name=f"Store-aCAES-geological-output-{site}",
+        )
+
+    logger.info(
+        "Constrained continuous RESC A-CAES to %.3f TWh electrical output "
+        "across %d German sites with %.1f-%.1f h endogenous duration.",
+        national_output_twh,
+        len(site_output_twh),
+        minimum_duration,
+        maximum_duration,
     )
 
 
@@ -1719,6 +1828,16 @@ def additional_functionality(n, snapshots, snakemake):
                 "fixed_neighbor_capacities.formulation must be either "
                 f"'constraint_band' or 'static', not {formulation!r}."
             )
+
+    acaes_options = (
+        snakemake.config.get("electricity", {})
+        .get("storage_options", {})
+        .get("aCAES_RESC_continuous", {})
+    )
+    if acaes_options.get("enable", False) and investment_year >= int(
+        acaes_options["first_investment_year"]
+    ):
+        add_continuous_acaes_constraints(n, acaes_options)
 
     add_power_limits(n, investment_year, constraints["limits_power_max"])
 
