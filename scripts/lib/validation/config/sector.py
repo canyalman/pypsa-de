@@ -438,9 +438,9 @@ class SectorConfig(BaseModel):
         True,
         description="Add the option for battery electric vehicles (BEV) to participate in demand-side management (DSM).",
     )
-    bev_dsm_availability: float = Field(
+    bev_dsm_availability: float | dict[int, float] = Field(
         0.5,
-        description="The share for battery electric vehicles (BEV) that are able to do demand side management (DSM).",
+        description="The share for battery electric vehicles (BEV) that are able to do demand side management (DSM), optionally specified by investment year.",
     )
     bev_energy: float = Field(
         0.05, description="The average size of battery electric vehicles (BEV) in MWh."

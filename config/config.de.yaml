@@ -293,6 +293,9 @@ costs:
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
 sector:
   v2g: false
+  bev_dsm_availability:
+    2030: 0.2
+    2035: 0.35
   solar_thermal: false
   district_heating:
     potential: 0.3
@@ -715,6 +718,7 @@ scale_capacity: {}
 # pathway (KVBG and BNetzA Monitoringbericht 2025, Figure 3-23).
 # Sources:
 # https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/Versorgungssicherheit/Netzreserve/DL/Netzreservebedarf_2025.pdf
+# https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/Versorgungssicherheit/Erzeugungskapazitaeten/Kraftwerksliste/artikel.html
 # https://www.gesetze-im-internet.de/kvbg/BJNR181810020.html
 # https://www.bundesnetzagentur.de/SharedDocs/Downloads/DE/Sachgebiete/Energie/Unternehmen_Institutionen/MonitoringEnergiederZukunft/monitoringbericht_2025.pdf
 german_conventional_capacity_pathway:
@@ -725,6 +729,20 @@ german_conventional_capacity_pathway:
     hard_coal: 8621
     lignite: 14700
   add_mastr_chp_below_mw: 10
+  # Pure-Erdgas CHP below 10 MW from the MaStR 2026-07-01 export, filtered to
+  # units operating on 2025-12-31 and excluding reserve/emergency assets.
+  small_chp_capacity_2025_mw:
+    gas: 4232.778
+  # Total CHP electrical output uses ElektrischeKwkLeistung from the same
+  # filtered MaStR population.
+  chp_capacity_2025_mw:
+    gas: 22974.690
+  # The power-only split uses all filtered MaStR Erdgas units. Technologies
+  # without a dedicated model carrier are grouped by operating role.
+  power_only_capacity_2025_mw:
+    gas:
+      OCGT: 1876.164
+      CCGT: 7139.925
   hard_coal_mw:
     2030: 8000
     2035: 0
