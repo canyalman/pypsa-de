@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: endo_4h_3h_2025base_fixedgas
+  prefix: endo_4h_3h_2025base_gasext
   name:
   # - ExPol
   # - KN2045_Mix
@@ -294,7 +294,7 @@ costs:
 sector:
   v2g: false
   bev_dsm_availability:
-    2030: 0.2
+    2030: 0.1
     2035: 0.35
   solar_thermal: false
   district_heating:
@@ -723,7 +723,7 @@ scale_capacity: {}
 # https://www.bundesnetzagentur.de/SharedDocs/Downloads/DE/Sachgebiete/Energie/Unternehmen_Institutionen/MonitoringEnergiederZukunft/monitoringbericht_2025.pdf
 german_conventional_capacity_pathway:
   enable: true
-  fix_gas_capacity_2025: true
+  fix_gas_capacity_2025: false
   market_fleet_2025_mw:
     gas: 27758
     hard_coal: 8621
