@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: thesis_base
+  prefix: thesis_base_bev_off
   name:
   # - ExPol
   # - KN2045_Mix
@@ -294,7 +294,7 @@ costs:
 sector:
   v2g: false
   bev_dsm_availability:
-    2030: 0.1
+    2030: 0.0
     2035: 0.35
   solar_thermal: false
   district_heating:
