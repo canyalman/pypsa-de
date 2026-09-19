@@ -897,21 +897,25 @@ def modify_mobility_demand(n, mobility_data_file):
     n.links.loc[BEV_chargers.index, "p_nom"] *= scale_factor
 
     V2G = n.links[(n.links.carrier == "V2G") & (n.links.bus0.str.startswith("DE"))]
-
-    if not V2G.empty:
-        n.links.loc[V2G.index, "p_nom"] *= (
-            scale_factor * snakemake.params.bev_dsm_availability
-        )
-
     dsm = n.stores[
         (n.stores.carrier == "EV battery") & (n.stores.bus.str.startswith("DE"))
     ]
+
+    bev_dsm_availability = snakemake.params.bev_dsm_availability
+    if isinstance(bev_dsm_availability, dict) and (
+        not V2G.empty or not dsm.empty
+    ):
+        investment_year = int(snakemake.wildcards.planning_horizons)
+        bev_dsm_availability = bev_dsm_availability[investment_year]
+
+    if not V2G.empty:
+        n.links.loc[V2G.index, "p_nom"] *= scale_factor * bev_dsm_availability
 
     if not dsm.empty:
         scale_factor = (
             number_of_EVs
             * snakemake.params.bev_energy
-            * snakemake.params.bev_dsm_availability
+            * bev_dsm_availability
         ) / dsm.e_nom.sum()
         n.stores.loc[dsm.index, "e_nom"] *= scale_factor
 
@@ -1444,7 +1448,9 @@ def _set_link_output_capacities(n, output_mw):
             n.links.loc[below_i, "p_nom_max"] = p_nom.loc[below_i]
 
 
-def scale_german_conventional_output(n, carriers, target_mw, label):
+def scale_german_conventional_output(
+    n, carriers, target_mw, label, include_nominal_minimum=False
+):
     """Scale an existing German Link fleet to an electrical-output target."""
     links_i = _german_links_by_carrier(n, carriers)
     if links_i.empty:
@@ -1460,7 +1466,12 @@ def scale_german_conventional_output(n, carriers, target_mw, label):
         logger.info("Set German %s capacity to zero.", label)
         return
 
-    current_output = n.links.loc[links_i].eval("p_nom * efficiency")
+    nominal = n.links.loc[links_i, "p_nom"].copy()
+    if include_nominal_minimum:
+        nominal = nominal.combine(
+            n.links.loc[links_i, "p_nom_min"], max, fill_value=0.0
+        )
+    current_output = nominal * n.links.loc[links_i, "efficiency"]
     existing_i = current_output.index[current_output > 0]
     current_total = current_output.loc[existing_i].sum()
     if current_total <= 0:
@@ -1476,12 +1487,29 @@ def scale_german_conventional_output(n, carriers, target_mw, label):
     )
 
 
-def calibrate_2025_german_market_fleet(n, technology, official_mw, small_chp_mw):
-    """Preserve MaStR CHP and calibrate power-only plants to the fleet total."""
+def calibrate_2025_german_market_fleet(
+    n,
+    technology,
+    official_mw,
+    small_chp_mw,
+    chp_target_mw=None,
+    power_only_targets=None,
+):
+    """Calibrate CHP and power-only plants to the 2025 fleet targets."""
     carriers = GERMAN_CONVENTIONAL_CARRIERS[technology]
     chp_carriers = [carrier for carrier in carriers if "CHP" in carrier]
     power_only_carriers = [carrier for carrier in carriers if carrier not in chp_carriers]
     chp_i = _german_links_by_carrier(n, chp_carriers)
+
+    if chp_target_mw is not None:
+        scale_german_conventional_output(
+            n,
+            chp_carriers,
+            float(chp_target_mw),
+            f"{technology} CHP",
+            include_nominal_minimum=True,
+        )
+
     chp_output_mw = n.links.loc[chp_i].eval("p_nom * efficiency").sum()
     total_target_mw = official_mw + small_chp_mw
     power_only_target_mw = total_target_mw - chp_output_mw
@@ -1491,14 +1519,36 @@ def calibrate_2025_german_market_fleet(n, technology, official_mw, small_chp_mw)
             f"the 2025 total target ({total_target_mw:.3f} MW)."
         )
 
-    scale_german_conventional_output(
-        n,
-        power_only_carriers,
-        max(power_only_target_mw, 0.0),
-        f"power-only {technology}",
-    )
+    if power_only_targets:
+        unknown = set(power_only_targets).difference(power_only_carriers)
+        if unknown:
+            raise ValueError(
+                f"Unknown power-only {technology} carriers: {sorted(unknown)}"
+            )
+        configured_total = sum(map(float, power_only_targets.values()))
+        if not np.isclose(configured_total, power_only_target_mw, atol=0.01):
+            raise ValueError(
+                f"Configured power-only {technology} capacities sum to "
+                f"{configured_total:.3f} MW, expected {power_only_target_mw:.3f} MW."
+            )
+        for carrier, target_mw in power_only_targets.items():
+            scale_german_conventional_output(
+                n,
+                [carrier],
+                float(target_mw),
+                carrier,
+                include_nominal_minimum=True,
+            )
+    else:
+        scale_german_conventional_output(
+            n,
+            power_only_carriers,
+            max(power_only_target_mw, 0.0),
+            f"power-only {technology}",
+            include_nominal_minimum=technology == "gas",
+        )
     logger.info(
-        "German 2025 %s total: %.3f MW power-only + %.3f MW unchanged MaStR CHP = %.3f MW.",
+        "German 2025 %s total: %.3f MW power-only + %.3f MW CHP = %.3f MW.",
         technology,
         max(power_only_target_mw, 0.0),
         chp_output_mw,
@@ -1590,6 +1640,9 @@ def apply_german_conventional_capacity_pathway(
 
     if year == 2025:
         market_fleet = pathway["market_fleet_2025_mw"]
+        small_chp_targets = pathway.get("small_chp_capacity_2025_mw", {})
+        chp_targets = pathway.get("chp_capacity_2025_mw", {})
+        power_only_targets = pathway.get("power_only_capacity_2025_mw", {})
         threshold = float(pathway.get("add_mastr_chp_below_mw", 0.0))
         small_chp = (
             _small_mastr_chp_capacity(german_chp_file, year, threshold)
@@ -1597,18 +1650,23 @@ def apply_german_conventional_capacity_pathway(
             else pd.Series(0.0, index=GERMAN_CONVENTIONAL_CARRIERS)
         )
         for technology in GERMAN_CONVENTIONAL_CARRIERS:
+            small_chp_mw = float(
+                small_chp_targets.get(technology, small_chp[technology])
+            )
             logger.info(
-                "German 2025 %s target: %.3f MW official market fleet + %.3f MW MaStR CHP below %.1f MW.",
+                "German 2025 %s target: %.3f MW official market fleet + %.3f MW CHP below %.1f MW.",
                 technology,
                 float(market_fleet[technology]),
-                float(small_chp[technology]),
+                small_chp_mw,
                 threshold,
             )
             calibrate_2025_german_market_fleet(
                 n,
                 technology,
                 float(market_fleet[technology]),
-                float(small_chp[technology]),
+                small_chp_mw,
+                chp_targets.get(technology),
+                power_only_targets.get(technology),
             )
         if pathway.get("fix_gas_capacity_2025", False):
             gas_i = _german_links_by_carrier(

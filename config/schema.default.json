@@ -4348,9 +4348,19 @@
           "type": "boolean"
         },
         "bev_dsm_availability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            }
+          ],
           "default": 0.5,
-          "description": "The share for battery electric vehicles (BEV) that are able to do demand side management (DSM).",
-          "type": "number"
+          "description": "The share for battery electric vehicles (BEV) that are able to do demand side management (DSM), optionally specified by investment year."
         },
         "bev_energy": {
           "default": 0.05,
@@ -10797,9 +10807,19 @@
           "type": "boolean"
         },
         "bev_dsm_availability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            }
+          ],
           "default": 0.5,
-          "description": "The share for battery electric vehicles (BEV) that are able to do demand side management (DSM).",
-          "type": "number"
+          "description": "The share for battery electric vehicles (BEV) that are able to do demand side management (DSM), optionally specified by investment year."
         },
         "bev_energy": {
           "default": 0.05,

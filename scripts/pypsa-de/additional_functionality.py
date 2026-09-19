@@ -806,7 +806,11 @@ def add_fixed_neighbor_capacity_constraints(
     )
 
 
-def add_capacity_limits(n, investment_year, limits_capacity, sense="maximum"):
+def add_capacity_limits(
+    n, investment_year, limits_capacity, sense="maximum", capacity_limit_basis=None
+):
+    """Apply nominal limits, optionally measuring selected Links at their output."""
+    capacity_limit_basis = capacity_limit_basis or {}
     for c in n.iterate_components(limits_capacity):
         logger.info(f"Adding {sense} constraints for {c.list_name}")
 
@@ -830,6 +834,39 @@ def add_capacity_limits(n, investment_year, limits_capacity, sense="maximum"):
                     & ~c.static.carrier.str.contains("thermal")
                 )  # exclude solar thermal
 
+                basis_by_year = (
+                    capacity_limit_basis.get(c.name, {}).get(carrier, {}).get(ct, {})
+                )
+                basis = basis_by_year.get(
+                    investment_year, basis_by_year.get(str(investment_year), "nominal")
+                )
+                if basis not in {"nominal", "output"}:
+                    raise ValueError(f"Unknown capacity limit basis: {basis!r}")
+                coefficients = pd.Series(1.0, index=c.static.index)
+                if basis == "output":
+                    if c.name != "Link":
+                        raise ValueError("Output-basis capacity limits require a Link.")
+                    valid_components &= c.static.active
+                    assets = c.static.index[valid_components]
+                    if assets.intersection(n.links_t.efficiency.columns).size:
+                        raise ValueError(
+                            f"Output capacity for {ct} {carrier} requires static "
+                            "discharger efficiencies, not time-varying efficiency."
+                        )
+                    efficiencies = c.static.loc[assets, "efficiency"]
+                    if not (np.isfinite(efficiencies) & efficiencies.gt(0)).all():
+                        raise ValueError(
+                            f"Invalid output efficiency for {ct} {carrier}."
+                        )
+                    coefficients.loc[assets] = efficiencies
+                    logger.info(
+                        "%s %s %s %s: capacity target is measured at Link output.",
+                        investment_year,
+                        ct,
+                        carrier,
+                        sense,
+                    )
+
                 existing_index = c.static.index[
                     valid_components & ~c.static[attr + "_nom_extendable"]
                 ]
@@ -839,13 +876,35 @@ def add_capacity_limits(n, investment_year, limits_capacity, sense="maximum"):
                     & c.static.active
                 ]
 
+                existing_capacity = (
+                    c.static.loc[existing_index, attr + "_nom"]
+                    * coefficients.loc[existing_index]
+                ).sum()
+
+                if (
+                    basis == "output"
+                    and sense == "maximum"
+                    and existing_capacity > limit + 1e-6
+                ):
+                    raise ValueError(
+                        f"Existing {ct} {carrier} output capacity {existing_capacity} MW "
+                        f"exceeds the {limit} MW target."
+                    )
+
                 if extendable_index.empty:
+                    if (
+                        basis == "output"
+                        and sense == "minimum"
+                        and existing_capacity < limit - 1e-6
+                    ):
+                        raise ValueError(
+                            f"Fixed {ct} {carrier} output capacity {existing_capacity} MW "
+                            f"cannot meet the {limit} MW target without extendable Links."
+                        )
                     logger.info(
                         f"No extendable {c.name} with carrier {carrier} found in {ct}. Skipping constraint."
                     )
                     continue
-
-                existing_capacity = c.static.loc[existing_index, attr + "_nom"].sum()
 
                 logger.info(
                     f"Existing {c.name} {carrier} capacity in {ct}: {existing_capacity} {units}"
@@ -853,7 +912,7 @@ def add_capacity_limits(n, investment_year, limits_capacity, sense="maximum"):
 
                 nom = n.model[c.name + "-" + attr + "_nom"].loc[extendable_index]
 
-                lhs = nom.sum()
+                lhs = (nom * coefficients.loc[extendable_index]).sum()
 
                 cname = f"capacity_{sense}-{ct}-{c.name}-{carrier.replace(' ', '-')}"
 
@@ -1624,8 +1683,122 @@ def adapt_nuclear_output(n):
     )
 
 
+def active_fixed_co2_price(snakemake):
+    """Return the carbon price only for explicitly selected solve horizons."""
+    settings = snakemake.params.solving["constraints"].get("fixed_co2_price", {})
+    if not settings.get("enable", False):
+        return None
+    year = int(snakemake.wildcards.planning_horizons)
+    horizons = settings.get("planning_horizons", [])
+    if not horizons:
+        raise ValueError("fixed_co2_price requires explicit planning_horizons.")
+    if year not in map(int, horizons):
+        return None
+
+    emissions = snakemake.config["costs"]["emission_prices"]
+    if not emissions.get("enable") or emissions.get("dynamic", False):
+        raise ValueError(
+            "Fixed CO2 pricing requires enabled, non-dynamic emission_prices."
+        )
+    prices = emissions.get("co2")
+    if not isinstance(prices, dict):
+        raise ValueError(
+            "Fixed CO2 pricing requires a year mapping to avoid charging both "
+            "electricity-stage generators and the sector-coupled CO2 atmosphere."
+        )
+    value = prices.get(year, prices.get(str(year)))
+    if value is None or not np.isfinite(float(value)) or float(value) < 0:
+        raise ValueError(f"Missing or invalid fixed CO2 price for {year}: {value!r}")
+    return float(value)
+
+
+def emissions_budget_constraints(n):
+    """Identify emissions caps, excluding physical sequestration constraints."""
+    glcs = n.global_constraints
+    return glcs.index[
+        glcs.type.eq("co2_atmosphere")
+        | glcs.index.isin(["CO2Limit"])
+        | glcs.index.str.startswith("co2_limit-")
+    ]
+
+
+def prepare_fixed_co2_price(n, snakemake):
+    price = active_fixed_co2_price(snakemake)
+    if price is None:
+        return
+    atmosphere = "co2 atmosphere"
+    if atmosphere not in n.stores.index:
+        raise ValueError("Fixed CO2 pricing requires the co2 atmosphere Store.")
+    if n.stores.at[atmosphere, "e_cyclic"]:
+        raise ValueError("The CO2 atmosphere Store must not be cyclic.")
+    if atmosphere in n.stores_t.marginal_cost:
+        if not np.allclose(n.stores_t.marginal_cost[atmosphere], -price):
+            raise ValueError(
+                "Time-varying CO2 atmosphere costs conflict with fixed pricing."
+            )
+
+    # Emissions charge the atmospheric Store (p < 0), hence the negative cost.
+    # Assign, do not add: prepare_sector_network may already have set this cost.
+    n.stores.loc[atmosphere, "marginal_cost"] = -price
+    caps = emissions_budget_constraints(n)
+    n.remove("GlobalConstraint", caps)
+    logger.info(
+        "Fixed CO2 price: %.9f EUR/tCO2; removed emissions budgets %s. "
+        "Physical CO2 sequestration constraints are unchanged.",
+        price,
+        caps.tolist(),
+    )
+
+
+def validate_fixed_co2_price_model(n, snakemake):
+    """Fail before solving if a price-only horizon still contains an emissions cap."""
+    price = active_fixed_co2_price(snakemake)
+    if price is None:
+        return
+    caps = emissions_budget_constraints(n)
+    model_caps = [
+        name
+        for name in n.model.constraints
+        if name == "GlobalConstraint-CO2Limit"
+        or name.startswith("GlobalConstraint-co2_limit-")
+    ]
+    if len(caps) or model_caps:
+        raise ValueError(
+            f"Fixed CO2 pricing still has emissions caps: {list(caps)} {model_caps}"
+        )
+    if not np.isclose(n.stores.at["co2 atmosphere", "marginal_cost"], -price):
+        raise ValueError("CO2 atmosphere marginal cost does not match the fixed price.")
+    logger.info("Validated price-only CO2 policy before solving.")
+
+
+def finalize_network_after_solve(n, snakemake):
+    """Record carbon payments separately from the cost objective and fixed CAPEX."""
+    price = active_fixed_co2_price(snakemake)
+    if price is None:
+        return
+    emissions_rate = -n.stores_t.p["co2 atmosphere"]
+    net_emissions = float(emissions_rate.dot(n.snapshot_weightings.stores))
+    carbon_payments = float(price * emissions_rate.dot(n.snapshot_weightings.objective))
+    fixed_capex = n.meta.get("fixed_neighbor_static", {}).get(
+        "removed_annualized_capex_eur", 0.0
+    )
+    n.meta["fixed_co2_price"] = {
+        "investment_year": int(snakemake.wildcards.planning_horizons),
+        "price_eur_per_tco2": price,
+        "net_atmospheric_emissions_tco2": net_emissions,
+        "co2_payments_in_objective_eur": carbon_payments,
+        "raw_objective_eur": float(n.objective),
+        "objective_excluding_co2_payments_eur": float(n.objective - carbon_payments),
+        "objective_including_fixed_nonde_capex_eur": float(n.objective + fixed_capex),
+        "objective_including_fixed_nonde_capex_excluding_co2_payments_eur": float(
+            n.objective + fixed_capex - carbon_payments
+        ),
+    }
+
+
 def prepare_network_before_model(n, snakemake):
     """Apply optional PyPSA-DE network changes before Linopy model creation."""
+    prepare_fixed_co2_price(n, snakemake)
     constraints = snakemake.params.solving["constraints"]
     fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
     if not fixed_neighbor.get("enable", False):
@@ -1689,11 +1862,19 @@ def additional_functionality(n, snapshots, snakemake):
     constraints = snakemake.params.solving["constraints"]
 
     add_capacity_limits(
-        n, investment_year, constraints["limits_capacity_min"], "minimum"
+        n,
+        investment_year,
+        constraints["limits_capacity_min"],
+        "minimum",
+        capacity_limit_basis=constraints.get("capacity_limit_basis"),
     )
 
     add_capacity_limits(
-        n, investment_year, constraints["limits_capacity_max"], "maximum"
+        n,
+        investment_year,
+        constraints["limits_capacity_max"],
+        "maximum",
+        capacity_limit_basis=constraints.get("capacity_limit_basis"),
     )
 
     fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
@@ -1740,7 +1921,9 @@ def additional_functionality(n, snapshots, snakemake):
     # force_boiler_profiles_existing_per_load(n)
     force_boiler_profiles_existing_per_boiler(n)
 
-    if isinstance(constraints["co2_budget_national"], dict):
+    if active_fixed_co2_price(snakemake) is not None:
+        logger.info("Skipping national CO2 budgets in the fixed-price horizon.")
+    elif isinstance(constraints["co2_budget_national"], dict):
         add_national_co2_budgets(
             n,
             snakemake,
@@ -1749,6 +1932,8 @@ def additional_functionality(n, snapshots, snakemake):
         )
     else:
         logger.warning("No national CO2 budget specified!")
+
+    validate_fixed_co2_price_model(n, snakemake)
 
     if investment_year == 2020:
         adapt_nuclear_output(n)

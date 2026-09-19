@@ -251,12 +251,17 @@ KN2045_Mix_FixedRenewables_BESS_Existing:
 
 
 KN2045_Mix_FixedRenewables_BESS_15GW:
-  # 15 GW German utility-scale BESS in 2035. Non-German capacity is fixed from the reference run.
+  # 15 GW AC output; 4h fleet duration gives 60 GWh AC-equivalent rated energy.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2035]
+      DE: [2025]
   solving:
     constraints:
+      capacity_limit_basis:
+        Link:
+          battery discharger:
+            DE:
+              2035: output
       limits_capacity_min:
         Generator:
           onwind:
@@ -278,7 +283,6 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery:
             DE:
               2025: 4.058
-              2035: 60
           home battery:
             DE:
               2025: 0
@@ -315,7 +319,6 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
           battery:
             DE:
               2025: 4.058
-              2035: 60
           home battery:
             DE:
               2025: 0
@@ -334,12 +337,17 @@ KN2045_Mix_FixedRenewables_BESS_15GW:
 
 
 KN2045_Mix_FixedRenewables_BESS_35GW:
-  # 35 GW German utility-scale BESS in 2035. Non-German capacity is fixed from the reference run.
+  # 35 GW AC output; 4h fleet duration gives 140 GWh AC-equivalent rated energy.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2035]
+      DE: [2025]
   solving:
     constraints:
+      capacity_limit_basis:
+        Link:
+          battery discharger:
+            DE:
+              2035: output
       limits_capacity_min:
         Generator:
           onwind:
@@ -361,7 +369,6 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery:
             DE:
               2025: 4.058
-              2035: 140
           home battery:
             DE:
               2025: 0
@@ -398,7 +405,6 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
           battery:
             DE:
               2025: 4.058
-              2035: 140
           home battery:
             DE:
               2025: 0
@@ -417,12 +423,17 @@ KN2045_Mix_FixedRenewables_BESS_35GW:
 
 
 KN2045_Mix_FixedRenewables_BESS_55GW:
-  # 55 GW German utility-scale BESS in 2035. Non-German capacity is fixed from the reference run.
+  # 55 GW AC output; 4h fleet duration gives 220 GWh AC-equivalent rated energy.
   battery_storage_duration:
     exclude:
-      DE: [2025, 2035]
+      DE: [2025]
   solving:
     constraints:
+      capacity_limit_basis:
+        Link:
+          battery discharger:
+            DE:
+              2035: output
       limits_capacity_min:
         Generator:
           onwind:
@@ -444,7 +455,6 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery:
             DE:
               2025: 4.058
-              2035: 220
           home battery:
             DE:
               2025: 0
@@ -481,7 +491,6 @@ KN2045_Mix_FixedRenewables_BESS_55GW:
           battery:
             DE:
               2025: 4.058
-              2035: 220
           home battery:
             DE:
               2025: 0

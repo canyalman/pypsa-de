@@ -4,11 +4,10 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_nonde_static_4h_3h_2025base
+  prefix: bess_fixed_nonde_co2_price
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BESS_Existing
   - KN2045_Mix_FixedRenewables_BESS_15GW
   - KN2045_Mix_FixedRenewables_BESS_35GW
   - KN2045_Mix_FixedRenewables_BESS_55GW
@@ -291,11 +290,23 @@ first_technology_occurrence:
 costs:
   custom_cost_fn: data/pypsa-de/custom_costs_nep_2023.csv
   transmission: "overhead" # either overhead line ("overhead") or underground cable ("underground")
+  emission_prices:
+    enable: true
+    dynamic: false
+    # Year mapping prevents a second carbon charge in prepare_network.py.
+    # 2035: -CO2Limit.mu from the 2026-09-14 endogenous reference (EUR/tCO2).
+    co2:
+      2025: 0.0
+      2030: 0.0
+      2035: 308.2489253762274
 
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
 sector:
   v2g: false
+  bev_dsm_availability:
+    2030: 0.2
+    2035: 0.35
   solar_thermal: false
   district_heating:
     potential: 0.3
@@ -460,6 +471,11 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
+    # Replace EU and national emissions budgets only in the new 2035 solves.
+    # The solved 2025/2030 reference history and physical CCS limits are retained.
+    fixed_co2_price:
+      enable: true
+      planning_horizons: [2035]
     # Materialize all non-German nominal capacities from the calibrated 3h
     # endogenous 4h reference before model creation. Dispatch, cross-border
     # flows, and all German endogenous capacity decisions remain free.
@@ -475,13 +491,12 @@ solving:
       # from the materialization headroom above and therefore does not enlarge
       # every fixed non-DE capacity.
       bound_clip_tolerance: 0.05
-      capacity_manifest: resources/fixed_neighbor_endo_4h_3h_2025base_fixedgas_static_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_endo_20260914_static_capacities.csv
       reference_networks:
-        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
       # Fixed pathways share the endogenous reference history through 2030.
-      # Existing solves 2030 separately to retain only the 2025 German BESS stock.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
       - KN2045_Mix_FixedRenewables_BESS_15GW
@@ -745,6 +760,7 @@ scale_capacity: {}
 # pathway (KVBG and BNetzA Monitoringbericht 2025, Figure 3-23).
 # Sources:
 # https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/Versorgungssicherheit/Netzreserve/DL/Netzreservebedarf_2025.pdf
+# https://www.bundesnetzagentur.de/DE/Fachthemen/ElektrizitaetundGas/Versorgungssicherheit/Erzeugungskapazitaeten/Kraftwerksliste/artikel.html
 # https://www.gesetze-im-internet.de/kvbg/BJNR181810020.html
 # https://www.bundesnetzagentur.de/SharedDocs/Downloads/DE/Sachgebiete/Energie/Unternehmen_Institutionen/MonitoringEnergiederZukunft/monitoringbericht_2025.pdf
 german_conventional_capacity_pathway:
@@ -755,6 +771,20 @@ german_conventional_capacity_pathway:
     hard_coal: 8621
     lignite: 14700
   add_mastr_chp_below_mw: 10
+  # Pure-Erdgas CHP below 10 MW from the MaStR 2026-07-01 export, filtered to
+  # units operating on 2025-12-31 and excluding reserve/emergency assets.
+  small_chp_capacity_2025_mw:
+    gas: 4232.778
+  # Total CHP electrical output uses ElektrischeKwkLeistung from the same
+  # filtered MaStR population.
+  chp_capacity_2025_mw:
+    gas: 22974.690
+  # The power-only split uses all filtered MaStR Erdgas units. Technologies
+  # without a dedicated model carrier are grouped by operating role.
+  power_only_capacity_2025_mw:
+    gas:
+      OCGT: 1876.164
+      CCGT: 7139.925
   hard_coal_mw:
     2030: 8000
     2035: 0
