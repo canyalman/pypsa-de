@@ -1948,6 +1948,13 @@ if __name__ == "__main__":
             n.objective + fixed_neighbor_summary["removed_annualized_capex_eur"]
         )
         n.meta["fixed_neighbor_static"] = fixed_neighbor_summary
+    if snakemake.params.custom_extra_functionality:
+        module = load_custom_extra_functionality_module(
+            snakemake.params.custom_extra_functionality
+        )
+        finalize = getattr(module, "finalize_network_after_solve", None)
+        if finalize is not None:
+            finalize(n, snakemake)
     n.export_to_netcdf(snakemake.output.network)
 
     if snakemake.output.get("model"):
