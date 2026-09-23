@@ -11,7 +11,9 @@ import pandas as pd
 import pypsa
 import pytest
 import yaml
+from snakemake.utils import update_config
 
+from scripts.lib.validation.config import validate_config
 from test.test_fixed_neighbor_constraints import MODULE
 
 PRICE = 308.2489253762274
@@ -100,6 +102,21 @@ def test_config_matches_bess_only_policy():
     assert config["solving"]["constraints"]["fixed_co2_price"] == {
         "enable": True,
         "planning_horizons": [2035],
+    }
+
+
+def test_year_specific_bev_dsm_availability_passes_workflow_validation():
+    root = Path(__file__).parents[1]
+    defaults = yaml.safe_load(
+        (root / "config/config.default.yaml").read_text(encoding="utf-8")
+    )
+    overrides = yaml.safe_load(
+        (root / "config/config.de.yaml").read_text(encoding="utf-8")
+    )
+    update_config(defaults, overrides)
+    assert validate_config(defaults).sector.bev_dsm_availability == {
+        2030: 0.2,
+        2035: 0.35,
     }
 
 

@@ -897,21 +897,25 @@ def modify_mobility_demand(n, mobility_data_file):
     n.links.loc[BEV_chargers.index, "p_nom"] *= scale_factor
 
     V2G = n.links[(n.links.carrier == "V2G") & (n.links.bus0.str.startswith("DE"))]
-
-    if not V2G.empty:
-        n.links.loc[V2G.index, "p_nom"] *= (
-            scale_factor * snakemake.params.bev_dsm_availability
-        )
-
     dsm = n.stores[
         (n.stores.carrier == "EV battery") & (n.stores.bus.str.startswith("DE"))
     ]
+
+    bev_dsm_availability = snakemake.params.bev_dsm_availability
+    if isinstance(bev_dsm_availability, dict) and (
+        not V2G.empty or not dsm.empty
+    ):
+        investment_year = int(snakemake.wildcards.planning_horizons)
+        bev_dsm_availability = bev_dsm_availability[investment_year]
+
+    if not V2G.empty:
+        n.links.loc[V2G.index, "p_nom"] *= scale_factor * bev_dsm_availability
 
     if not dsm.empty:
         scale_factor = (
             number_of_EVs
             * snakemake.params.bev_energy
-            * snakemake.params.bev_dsm_availability
+            * bev_dsm_availability
         ) / dsm.e_nom.sum()
         n.stores.loc[dsm.index, "e_nom"] *= scale_factor
 
