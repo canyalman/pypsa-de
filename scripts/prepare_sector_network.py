@@ -2467,7 +2467,7 @@ def add_EVs(
         - bev_charge_efficiency: float
         - bev_dsm: bool
         - bev_energy: float
-        - bev_dsm_availability: float
+        - bev_dsm_availability: float or dict[int, float]
         - v2g: bool
     investment_year: int
 
@@ -2546,10 +2546,14 @@ def add_EVs(
 
     # Add demand-side management components if enabled
     if options["bev_dsm"] and options["bev_dsm"] <= investment_year:
+        bev_dsm_availability = options["bev_dsm_availability"]
+        if isinstance(bev_dsm_availability, dict):
+            bev_dsm_availability = bev_dsm_availability[investment_year]
+
         e_nom = (
             number_cars
             * options["bev_energy"]
-            * options["bev_dsm_availability"]
+            * bev_dsm_availability
             * electric_share
         )
 
@@ -2573,7 +2577,7 @@ def add_EVs(
                 suffix=" V2G",
                 bus1=spatial.nodes,
                 bus0=spatial.nodes + " EV battery",
-                p_nom=p_nom * options["bev_dsm_availability"],
+                p_nom=p_nom * bev_dsm_availability,
                 carrier="V2G",
                 p_max_pu=avail_profile.loc[n.snapshots, spatial.nodes],
                 lifetime=1,

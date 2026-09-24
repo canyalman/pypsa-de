@@ -4,11 +4,14 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: caes_rte69_fixed_nonde_3h_2025base
+  prefix: caes_rte69_fixed_nonde_3h
   name:
   # - ExPol
   # - KN2045_Mix
   - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -288,11 +291,22 @@ first_technology_occurrence:
 costs:
   custom_cost_fn: data/pypsa-de/custom_costs_nep_2023.csv
   transmission: "overhead" # either overhead line ("overhead") or underground cable ("underground")
+  emission_prices:
+    enable: true
+    dynamic: false
+    # 2035: -CO2Limit.mu from the 2026-09-14 endogenous reference (EUR/tCO2).
+    co2:
+      2025: 0.0
+      2030: 0.0
+      2035: 308.2489253762274
 
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
 sector:
   v2g: false
+  bev_dsm_availability:
+    2030: 0.2
+    2035: 0.35
   solar_thermal: false
   district_heating:
     potential: 0.3
@@ -457,6 +471,10 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
+    # Match the fixed-price policy of the Li-ion-only 2035 pathways.
+    fixed_co2_price:
+      enable: true
+      planning_horizons: [2035]
     # Materialize all non-German nominal capacities from the calibrated 3h
     # endogenous 4h reference before model creation. Dispatch, cross-border
     # flows, and all German endogenous capacity decisions remain free.
@@ -472,15 +490,18 @@ solving:
       # from the materialization headroom above and therefore does not enlarge
       # every fixed non-DE capacity.
       bound_clip_tolerance: 0.05
-      capacity_manifest: resources/fixed_neighbor_endo_4h_3h_2025base_fixedgas_static_capacities.csv
+      capacity_manifest: resources/fixed_neighbor_endo_20260914_static_capacities.csv
       reference_networks:
-        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-02/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
       # Reuse the endogenous reference history through 2030; solve only 2035 anew.
       reuse_reference_horizons: [2030]
       reuse_reference_runs:
       - KN2045_Mix_FixedRenewables
+      - KN2045_Mix_FixedRenewables_BESS_15GW
+      - KN2045_Mix_FixedRenewables_BESS_35GW
+      - KN2045_Mix_FixedRenewables_BESS_55GW
     limits_capacity_max:
       Generator:
         onwind:

@@ -56,11 +56,13 @@ def test_production_config_uses_approved_continuous_formulation():
     options = _production_options()
     costs = options["costs"]
 
-    assert (
-        config["run"]["prefix"]
-        == "caes_rte69_fixed_nonde_3h_2025base"
-    )
-    assert config["run"]["name"] == ["KN2045_Mix_FixedRenewables"]
+    assert config["run"]["prefix"] == "caes_rte69_fixed_nonde_3h"
+    assert config["run"]["name"] == [
+        "KN2045_Mix_FixedRenewables",
+        "KN2045_Mix_FixedRenewables_BESS_15GW",
+        "KN2045_Mix_FixedRenewables_BESS_35GW",
+        "KN2045_Mix_FixedRenewables_BESS_55GW",
+    ]
     assert options["round_trip_efficiency"] == 0.69
     assert options["minimum_output_duration_hours"] == 8
     assert options["maximum_output_duration_hours"] == 48
