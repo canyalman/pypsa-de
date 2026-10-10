@@ -73,6 +73,7 @@ KN2045_Mix:
 
 
 KN2045_Mix_FixedRenewables:
+  weather_year: 2010
   solving:
     constraints:
       # Fixed German renewable capacities for the thesis scenario.
