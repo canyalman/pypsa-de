@@ -31,6 +31,12 @@ class ConventionalConfig(ConfigModel):
         description="Monthly rolling mean window for fossil fuel prices smoothing.",
         ge=1,
     )
+    nuclear_availability_year: int | None = Field(
+        None,
+        description="Reference year for country-level nuclear p_max_pu inputs. If unset, use the snapshot year.",
+        strict=True,
+        ge=1,
+    )
     nuclear: dict[str, str | float] = Field(
         default_factory=lambda: {"p_max_pu": "data/nuclear_p_max_pu.csv"},
         description="For any carrier/technology overwrite attributes as listed below.",

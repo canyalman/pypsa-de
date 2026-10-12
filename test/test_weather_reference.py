@@ -4,8 +4,10 @@
 
 """Fixed-load-calendar regression tests without downloads or network solves."""
 
+import ast
 import copy
 import runpy
+from functools import lru_cache, partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,6 +15,9 @@ import numpy as np
 import pandas as pd
 import pytest
 import yaml
+from snakemake.io import Wildcards
+from snakemake.parser import parse
+from snakemake.sourcecache import LocalSourceFile
 from snakemake.utils import update_config
 
 from scripts import _helpers
@@ -178,7 +183,8 @@ def test_script_supplements_from_source_year_not_weather_year(
     assert list(captured["load"].columns) == COUNTRIES
 
 
-def test_effective_weather_reference_configuration():
+@pytest.fixture
+def weather_reference_config():
     config = {}
     for filename in ["config.default.yaml", "config.de.yaml"]:
         update_config(
@@ -195,6 +201,13 @@ def test_effective_weather_reference_configuration():
     builder["write_weather_dependent_config"](generated, scenario, year)
     update_config(config, generated[scenario])
     validate_config(config)
+    return config
+
+
+def test_effective_weather_reference_configuration(weather_reference_config):
+    config = weather_reference_config
+    scenario = "KN2045_Mix_FixedRenewables"
+    year = pd.Timestamp(config["snapshots"]["start"]).year
 
     cutout = f"europe-{year}-sarah3-era5"
     assert config["run"]["name"] == [scenario]
@@ -204,6 +217,8 @@ def test_effective_weather_reference_configuration():
     assert config["atlite"]["cutouts"][cutout]["time"] == [str(year), str(year)]
     assert config["load"]["fixed_year"] == 2013
     assert config["load"]["scaling_factor"] == 1.0
+    assert config["conventional"]["nuclear_availability_year"] == 2013
+    assert config["conventional"]["nuclear"]["p_max_pu"] == "data/nuclear_p_max_pu.csv"
     assert config["sector"]["heat_demand_cutout"] == "default"
     for technology in [
         "onwind",
@@ -244,3 +259,67 @@ def test_effective_weather_reference_configuration():
     assert not constraints.get("fixed_neighbor_capacities", {}).get("enable", False)
     assert not constraints.get("fixed_co2_price", {}).get("enable", False)
     assert 2035 not in constraints["limits_capacity_max"]["Store"]["battery"]["DE"]
+
+
+def test_nuclear_reference_reaches_add_electricity_workflow(weather_reference_config):
+    config = weather_reference_config
+    scenario = "KN2045_Mix_FixedRenewables"
+    namespace = {
+        "config": config,
+        "scenarios": {scenario: {}},
+        "copy": copy,
+        "partial": partial,
+        "lru_cache": lru_cache,
+        "update_config": update_config,
+        "update_config_from_wildcards": _helpers.update_config_from_wildcards,
+    }
+    sourcecache = SimpleNamespace(
+        open=lambda source: open(
+            source.get_path_or_uri(secret_free=True), encoding="utf-8"
+        )
+    )
+    getter_functions = {
+        "get_config",
+        "merge_configs",
+        "scenario_config",
+        "static_getter",
+        "dynamic_getter",
+        "config_provider",
+    }
+    rule_ast = None
+    for filename in ["common.smk", "build_electricity.smk"]:
+        path = ROOT / "rules" / filename
+        compiled, _ = parse(
+            LocalSourceFile(str(path)), SimpleNamespace(sourcecache=sourcecache), {}
+        )
+        rule_ast = ast.parse(compiled)
+        functions = [
+            node
+            for node in rule_ast.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name in getter_functions | {"input_conventional"}
+        ]
+        exec(
+            compile(ast.Module(body=functions, type_ignores=[]), str(path), "exec"),
+            namespace,
+        )
+
+    wildcards = Wildcards(fromdict={"run": scenario, "clusters": "27"})
+    inputs = namespace["input_conventional"](wildcards)
+    assert inputs["conventional_nuclear_p_max_pu"] == "data/nuclear_p_max_pu.csv"
+    assert not any("availability_year" in name for name in inputs)
+
+    param_expressions = [
+        keyword.value
+        for node in ast.walk(rule_ast)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "params"
+        for keyword in node.keywords
+        if keyword.arg == "conventional"
+    ]
+    assert len(param_expressions) == 1
+    getter = eval(
+        compile(ast.Expression(param_expressions[0]), "params", "eval"), namespace
+    )
+    assert getter(wildcards)["nuclear_availability_year"] == 2013

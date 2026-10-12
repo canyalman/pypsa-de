@@ -106,6 +106,9 @@ atlite:
 load:
   fixed_year: 2013 # hold the base electricity load constant across weather years
 
+conventional:
+  nuclear_availability_year: 2013 # explicit input for the intermediate electricity network; 1996 is missing
+
 
 renewable:
   onwind:

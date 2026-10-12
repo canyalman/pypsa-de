@@ -713,15 +713,42 @@ def attach_conventional_generators(
             if f"conventional_{carrier}_{attr}" in conventional_inputs:
                 # Values affecting generators of technology k country-specific
                 # First map generator buses to countries; then map countries to p_max_pu
-                df = pd.read_csv(
-                    conventional_inputs[f"conventional_{carrier}_{attr}"], index_col=0
+                source = conventional_inputs[f"conventional_{carrier}_{attr}"]
+                df = pd.read_csv(source, index_col=0)
+                reference_year = (
+                    conventional_params.get("nuclear_availability_year")
+                    if carrier == "nuclear" and attr == "p_max_pu"
+                    else None
                 )
                 try:
                     df.columns = df.columns.astype(int)
-                    year = n.snapshots[0].year
+                except (ValueError, TypeError) as exc:
+                    if reference_year is not None:
+                        raise ValueError(
+                            f"{source}: {carrier}.{attr} reference year "
+                            f"{reference_year} requires integer year columns."
+                        ) from exc
+                    # Preserve support for non-year, country-specific attribute tables.
+                    values = df.iloc[:, -1]
+                else:
+                    weather_year = n.snapshots[0].year
+                    year = weather_year if reference_year is None else reference_year
+                    if year not in df.columns:
+                        raise ValueError(
+                            f"{source}: {carrier}.{attr} has no data for year {year} "
+                            f"(weather year {weather_year}). Available years: "
+                            f"{df.columns.tolist()}. Set an explicit reference year "
+                            "or provide the missing input; no fallback year is selected."
+                        )
                     values = df[year]
-                except (ValueError, TypeError):
-                    values = df.iloc[:, -1]  # take last column if year selection fails
+                    logger.info(
+                        "Using %s.%s from %s, availability year %s (weather year %s).",
+                        carrier,
+                        attr,
+                        source,
+                        year,
+                        weather_year,
+                    )
                 bus_values = n.buses.country.map(values)
                 n.generators.update(
                     {attr: n.generators.loc[idx].bus.map(bus_values).dropna()}

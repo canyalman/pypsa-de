@@ -19,6 +19,8 @@ endo_4h_3h_2025base_fixedgas reference assumptions.
 - Keep three-hour resolution and the original four-hour utility battery logic.
 - Keep BEV DSM availability at 0.20 in 2030 and 0.35 in 2035, with V2G off.
 - Keep German gas investment fixed in 2025 and available in later years.
+- In the 1996 branch, select the 2013 nuclear availability column only to let
+  the intermediate add_electricity step complete; the CSV has no 1996 column.
 - No iron-air, CAES or 15/35/55 GW deployment pathways are added here.
 
 ## Electricity load and weather
@@ -74,13 +76,43 @@ reference network, not the original 2013-weather reference.
 ## Local checks
 
 ```bash
-python -m pytest test/test_weather_reference.py -q
+python -m pytest test/test_weather_reference.py test/test_nuclear_availability.py -q
 ```
 
 These tests use synthetic in-memory load data, not downloaded weather files.
 They cover all 15 country columns, 2013 load preservation, synthetic gap
 filling from the source year, leap days, missing-data rejection, schema
 validation, cutout routing and resource isolation.
+
+Nuclear tests exercise add_electricity on small synthetic networks. They check
+2013 availability in all weather calendars, missing-year errors, schema validation
+and unchanged default/scalar/non-nuclear attribute behavior.
+
+## Resuming the failed 1996 run
+
+Pull thesis-weather-1996, then resubmit the same target with the established
+cluster command and `--rerun-incomplete`. The failed add_electricity output must
+be rebuilt, but existing weather profiles can be reused. Do not delete profiles,
+change the prefix, or force all rules. There is no need to regenerate scenarios
+for this correction because the scenario overrides have not changed.
+
+The current config excludes nuclear from pypsa_eur.Generator. Consequently,
+prepare_sector_network removes these intermediate nuclear Generators. The
+existing nuclear fleet is added separately as Links without transferring this
+CSV's availability factors. This fix unblocks 1996; it does not introduce a
+new availability assumption into the final sector optimisation. The tests
+verify that different intermediate nuclear availability factors are removed
+while retained renewable Generators are unchanged.
+
+Do not cancel or restart the 2010/2023 runs because of this correction: they
+already pass add_electricity and these CSV factors do not reach their final
+sector models. This correction is published only on thesis-weather-1996.
+
+The nuclear setting is passed through the existing add_electricity conventional
+params; no new workflow input or scenario-generation step is needed for this
+correction. Missing requested years raise an explicit error, never use a
+nearest/latest year. Non-year conventional attribute tables remain supported
+when no explicit nuclear reference is requested.
 
 Real weather-profile generation and solver optimality must still be checked
 on the cluster. A local full Snakemake dry-run may also require connectivity
