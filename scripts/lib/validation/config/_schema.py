@@ -13,6 +13,7 @@ from scripts.lib.validation.config.atlite import AtliteConfig
 from scripts.lib.validation.config.biomass import BiomassConfig
 from scripts.lib.validation.config.clustering import ClusteringConfig
 from scripts.lib.validation.config.co2_budget import Co2BudgetConfig
+from scripts.lib.validation.config.controlled_weather import ControlledWeatherConfig
 from scripts.lib.validation.config.conventional import ConventionalConfig
 from scripts.lib.validation.config.costs import CostsConfig
 from scripts.lib.validation.config.countries import CountriesConfig
@@ -119,6 +120,10 @@ class ConfigSchema(BaseModel):
     snapshots: SnapshotsConfig = Field(
         default_factory=SnapshotsConfig,
         description="Configuration for the time period snapshots.",
+    )
+    controlled_weather: ControlledWeatherConfig = Field(
+        default_factory=ControlledWeatherConfig,
+        description="Opt-in common-history, fixed-fleet weather comparison.",
     )
     enable: EnableConfig = Field(
         default_factory=EnableConfig,

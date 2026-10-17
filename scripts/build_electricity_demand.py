@@ -219,6 +219,38 @@ def repeat_years(s: pd.Series, years: list) -> pd.Series:
     )
 
 
+def load_source_snapshots(snapshots, fixed_year=False):
+    """Select the load calendar before aligning it to the weather calendar."""
+    if not fixed_year:
+        return snapshots
+    if len(snapshots.year.unique()) != 1:
+        raise ValueError("A fixed load year requires a single target calendar year.")
+    try:
+        return pd.DatetimeIndex(
+            [t.replace(year=int(fixed_year)) for t in snapshots], name=snapshots.name
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "Cannot map the target calendar to the fixed load year. "
+            "Use enable.drop_leap_day: true when the source has no February 29."
+        ) from exc
+
+
+def align_load_to_snapshots(load, snapshots, fixed_year=False):
+    """Preserve source-year values and reject missing load before CSV export."""
+    source_snapshots = load_source_snapshots(snapshots, fixed_year)
+    load = load.reindex(index=source_snapshots)
+    missing = load.isna().sum()
+    if missing.any():
+        raise ValueError(
+            "Load contains missing values after source-year selection: "
+            f"{missing[missing > 0].to_dict()}. "
+            "Check source-year data and synthetic supplementation."
+        )
+    load.index = snapshots
+    return load
+
+
 if __name__ == "__main__":
     if "snakemake" not in globals():
         from scripts._helpers import mock_snakemake
@@ -231,6 +263,8 @@ if __name__ == "__main__":
     snapshots = get_snapshots(
         snakemake.params.snapshots, snakemake.params.drop_leap_day
     )
+    fixed_year = snakemake.params.load.get("fixed_year", False)
+    source_snapshots = load_source_snapshots(snapshots, fixed_year)
 
     # supported year ranges
     years = slice("2010", "2025")
@@ -311,26 +345,19 @@ if __name__ == "__main__":
         synthetic_load = pd.read_csv(fn, index_col=0, parse_dates=True)
         # UA, MD, XK, CY, MT do not appear in synthetic load data
         countries = list(set(countries) - set(["UA", "MD", "XK", "CY", "MT"]))
-        synthetic_load = synthetic_load.loc[snapshots, countries]
+        synthetic_load = synthetic_load.reindex(
+            index=source_snapshots, columns=countries
+        )
         load = load.combine_first(synthetic_load)
 
-    assert not load.isna().any().any(), (
-        "Load data contains nans. Adjust the parameters "
-        "`time_shift_for_large_gaps` or modify the `manual_adjustment` function "
-        "for implementing the needed load data modifications."
+    load = align_load_to_snapshots(
+        load.reindex(columns=snakemake.params.countries), snapshots, fixed_year
     )
-
-    fixed_year = snakemake.params["load"].get("fixed_year", False)
-    years = (
-        slice(str(fixed_year), str(fixed_year))
-        if fixed_year
-        else slice(snapshots[0], snapshots[-1])
+    logger.info(
+        "Load source year: %s; weather year: %s; annual country totals (MWh): %s",
+        fixed_year or int(snapshots.year[0]),
+        int(snapshots.year[0]),
+        load.sum().round(3).to_dict(),
     )
-
-    load = load.loc[years].reindex(index=snapshots)
-
-    # need to reindex load time series to target year
-    if fixed_year:
-        load.index = load.index.map(lambda t: t.replace(year=snapshots.year[0]))
 
     load.to_csv(snakemake.output[0])

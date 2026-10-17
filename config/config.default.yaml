@@ -424,6 +424,7 @@ conventional:
   unit_commitment: false
   dynamic_fuel_price: false
   fuel_price_rolling_window: 6
+  nuclear_availability_year: null # null selects the snapshot year; set an explicit reference for weather sensitivities
   nuclear:
     p_max_pu: data/nuclear_p_max_pu.csv
 

@@ -394,6 +394,9 @@ rule sync_dry:
         """
 
 
+include: "rules/pypsa-de/controlled_weather.smk"
+
+
 rule clean:
     message:
         "Remove all build results but keep downloaded data."

@@ -280,10 +280,14 @@ def materialize_fixed_neighbor_capacities(
             # previous target and carried capacity prove that exact history.
             carried_tolerance = max(capacity_tolerance, bound_clip_tolerance) + 1e-3
             carried_delta = (original_unexpected - previous_reference).abs()
-            materialized_in_previous_horizon = static.get(
-                FIXED_NEIGHBOR_WAS_EXTENDABLE,
-                pd.Series(False, index=static.index, dtype=bool),
-            ).reindex(unexpected, fill_value=False).astype("boolean")
+            materialized_in_previous_horizon = (
+                static.get(
+                    FIXED_NEIGHBOR_WAS_EXTENDABLE,
+                    pd.Series(False, index=static.index, dtype=bool),
+                )
+                .reindex(unexpected, fill_value=False)
+                .astype("boolean")
+            )
             carried_reference_asset = (
                 previous_reference.notna()
                 & previous_reference.ge(0.0)
@@ -345,9 +349,7 @@ def materialize_fixed_neighbor_capacities(
                             "year": investment_year,
                             "component": component,
                             "asset": asset,
-                            "countries": ";".join(
-                                sorted(residual_countries[asset])
-                            ),
+                            "countries": ";".join(sorted(residual_countries[asset])),
                             "nominal_attribute": nominal_attr,
                             "original_nominal": original_unexpected.at[asset],
                             "reference_nominal": 0.0,
@@ -505,9 +507,9 @@ def materialize_fixed_neighbor_capacities(
             # eliminating the capacity variables does not also eliminate the
             # small aggregate feasibility margin used by the solved model.
             numerical_upper = reference.loc[extendable_assets] + capacity_tolerance
-            numerical_upper = pd.concat(
-                [numerical_upper, ext_reference], axis=1
-            ).max(axis=1)
+            numerical_upper = pd.concat([numerical_upper, ext_reference], axis=1).max(
+                axis=1
+            )
             applied.loc[extendable_assets] = numerical_upper.clip(
                 lower=ext_lower, upper=ext_upper
             )
@@ -562,10 +564,15 @@ def materialize_fixed_neighbor_capacities(
         )
 
     for static, assets, nominal_column, extendable_column, applied in pending_updates:
-        originally_extendable = static.get(
-            FIXED_NEIGHBOR_WAS_EXTENDABLE,
-            pd.Series(False, index=static.index, dtype=bool),
-        ).astype("boolean").fillna(False).astype(bool)
+        originally_extendable = (
+            static.get(
+                FIXED_NEIGHBOR_WAS_EXTENDABLE,
+                pd.Series(False, index=static.index, dtype=bool),
+            )
+            .astype("boolean")
+            .fillna(False)
+            .astype(bool)
+        )
         originally_extendable.loc[assets] |= (
             static.loc[assets, extendable_column].fillna(False).astype(bool)
         )
@@ -1795,6 +1802,20 @@ def finalize_network_after_solve(n, snakemake):
         ),
     }
 
+    controlled = getattr(n, "_controlled_weather_summary", None)
+    if controlled is not None:
+        controlled = dict(controlled)
+        total_fixed = (
+            fixed_capex + controlled["removed_annualized_domestic_renewable_capex_eur"]
+        )
+        controlled["objective_including_removed_fixed_capex_eur"] = float(
+            n.objective + total_fixed
+        )
+        controlled["objective_including_removed_fixed_capex_excluding_co2_eur"] = float(
+            n.objective + total_fixed - carbon_payments
+        )
+        n.meta["controlled_weather_result"] = controlled
+
 
 def prepare_network_before_model(n, snakemake):
     """Apply optional PyPSA-DE network changes before Linopy model creation."""
@@ -1853,6 +1874,9 @@ def prepare_network_before_model(n, snakemake):
         "capex_ledger": str(ledger_path),
     }
     logger.info("Wrote fixed-neighbor static CAPEX ledger to %s.", ledger_path)
+    from scripts.controlled_weather import prepare_controlled_weather
+
+    prepare_controlled_weather(n, snakemake)
 
 
 def additional_functionality(n, snapshots, snakemake):

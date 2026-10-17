@@ -200,6 +200,11 @@ def output_model(path_template):
 
 
 def solved_previous_horizon(w):
+    controlled = config_provider("controlled_weather", default={})(w)
+    if controlled.get("enable", False):
+        if int(w.planning_horizons) != controlled["planning_horizon"]:
+            raise ValueError("Only the final horizon is solved in controlled-weather branches.")
+        return controlled["previous_network"]
     planning_horizons = config_provider("scenario", "planning_horizons")(w)
     i = planning_horizons.index(int(w.planning_horizons))
     planning_horizon_p = str(planning_horizons[i - 1])
