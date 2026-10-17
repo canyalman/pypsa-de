@@ -170,11 +170,17 @@ rule add_brownfield:
 ruleorder: add_existing_baseyear > add_brownfield
 
 
+def weather_solve_input(w):
+    controlled = config_provider("controlled_weather", default={})(w)
+    suffix = "dispatch" if controlled.get("enable") and controlled.get("mode") == "dispatch" else "final"
+    return resources(
+        "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_" + suffix + ".nc"
+    )
+
+
 rule solve_sector_network_myopic:
     input:
-        network=resources(
-            "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_final.nc"
-        ),
+        network=weather_solve_input,
         co2_totals_name=resources("co2_totals.csv"),
         energy_totals=resources("energy_totals.csv"),
         fixed_neighbor_capacities=fixed_neighbor_capacity_manifest,
@@ -184,7 +190,7 @@ rule solve_sector_network_myopic:
             else []
         ),
         controlled_weather_code=lambda w: (
-            "scripts/controlled_weather.py"
+            ["scripts/controlled_weather.py", "scripts/dispatch_weather.py"]
             if config_provider("controlled_weather", "enable", default=False)(w) else []
         ),
     output:
