@@ -4,13 +4,11 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: bess_fixed_nonde_co2_price
+  prefix: thesis_weather_controlled_2023
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables_BESS_15GW
-  - KN2045_Mix_FixedRenewables_BESS_35GW
-  - KN2045_Mix_FixedRenewables_BESS_55GW
+  - KN2045_Mix_FixedRenewables
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -23,7 +21,7 @@ run:
     manual_file: config/scenarios.manual.yaml
     file: config/scenarios.automated.yaml
   shared_resources:
-    policy: base #stops recalculating
+    policy: false # keep weather-dependent profiles separate from the 2013 baseline
     exclude:
     - existing_heating.csv   # specify files which should not be shared between scenarios
     - costs
@@ -90,26 +88,32 @@ countries: ['AT', 'BE', 'CH', 'CZ', 'DE', 'DK', 'FR', 'GB', 'LU', 'NL', 'NO', 'P
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#snapshots
 snapshots:
-  start: "2013-01-01"
-  end: "2014-01-01"
+  start: "2023-01-01"
+  end: "2024-01-01"
   inclusive: 'left'
 
 atlite:
-  default_cutout: europe-2013-sarah3-era5
+  default_cutout: europe-2023-sarah3-era5
   cutouts:
-    europe-2013-sarah3-era5:
+    europe-2023-sarah3-era5:
       module: [sarah, era5] # in priority order
       x: [-12., 42.]
       y: [33., 72]
       dx: 0.3
       dy: 0.3
-      time: ['2013', '2013']
+      time: ['2023', '2023']
+
+load:
+  fixed_year: 2013 # hold the base electricity load constant across weather years
+
+conventional:
+  nuclear_availability_year: 2013 # fixed input only for the intermediate electricity network
 
 
 renewable:
   onwind:
     capacity_per_sqkm: 1.4
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     correction_factor: 0.95
     resource:
       smooth: false  #this is false until correction to onshore wind speeds from GWA implemented
@@ -133,7 +137,7 @@ renewable:
   offwind-ac:
     capacity_per_sqkm: 6
     landfall_length: 30
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     correction_factor: 0.95
     resource:
       smooth: true
@@ -157,7 +161,7 @@ renewable:
   offwind-dc:
     capacity_per_sqkm: 6
     landfall_length: 30
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     correction_factor: 0.95
     resource:
       smooth: true
@@ -181,20 +185,20 @@ renewable:
   offwind-float: # disabled at the moment
     landfall_length: 30
     capacity_per_sqkm: 6
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     correction_factor: 0.95
   solar:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     correction_factor: 0.9 # scaling to Abbildung 36 of https://www.ise.fraunhofer.de/de/veroeffentlichungen/studien/aktuelle-fakten-zur-photovoltaik-in-deutschland.html
   solar-hsat:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
     correction_factor: 0.9 # scaling to Abbildung 36 of https://www.ise.fraunhofer.de/de/veroeffentlichungen/studien/aktuelle-fakten-zur-photovoltaik-in-deutschland.html
   hydro:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
 
 lines:
   dynamic_line_rating:
-    cutout: europe-2013-sarah3-era5
+    cutout: europe-2023-sarah3-era5
 
 clustering:
   # mode: administrative
@@ -288,17 +292,15 @@ first_technology_occurrence:
   Bus:
     urban central water pits: 2035
 costs:
-  custom_cost_fn: data/pypsa-de/custom_costs_nep_2023.csv
-  transmission: "overhead" # either overhead line ("overhead") or underground cable ("underground")
   emission_prices:
     enable: true
     dynamic: false
-    # Year mapping prevents a second carbon charge in prepare_network.py.
-    # 2035: -CO2Limit.mu from the 2026-09-14 endogenous reference (EUR/tCO2).
     co2:
       2025: 0.0
       2030: 0.0
       2035: 308.2489253762274
+  custom_cost_fn: data/pypsa-de/custom_costs_nep_2023.csv
+  transmission: "overhead" # either overhead line ("overhead") or underground cable ("underground")
 
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#sector
@@ -460,6 +462,21 @@ solving:
         H2 pipeline retrofitted: 0.05
       fractional_last_unit_size: true
   constraints:
+    fixed_co2_price:
+      enable: true
+      planning_horizons: [2035]
+    fixed_neighbor_capacities:
+      enable: true
+      formulation: static
+      domestic_country: DE
+      strict_asset_match: true
+      capacity_tolerance: 0.012
+      bound_clip_tolerance: 0.05
+      capacity_manifest: resources/thesis_weather_controlled_2023/fixed_neighbor_capacities.csv
+      reference_networks:
+        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
+        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
     # The default CO2 budget uses the KSG targets, and the non CO2 emissions from the REMIND model in the KN2045_Mix scenario
     co2_budget_national:
       DE:
@@ -471,37 +488,6 @@ solving:
         2045: -0.05
         2050: -0.048
     efuel_export_ban: false
-    # Replace EU and national emissions budgets only in the new 2035 solves.
-    # The solved 2025/2030 reference history and physical CCS limits are retained.
-    fixed_co2_price:
-      enable: true
-      planning_horizons: [2035]
-    # Materialize all non-German nominal capacities from the calibrated 3h
-    # endogenous 4h reference before model creation. Dispatch, cross-border
-    # flows, and all German endogenous capacity decisions remain free.
-    fixed_neighbor_capacities:
-      enable: true
-      formulation: static
-      domestic_country: DE
-      strict_asset_match: true
-      # Formerly extendable capacities are materialized at the upper edge of
-      # this numerical reference band, while native bounds remain enforced.
-      capacity_tolerance: 0.012
-      # Clip only tiny reference/native-bound discrepancies. This is separate
-      # from the materialization headroom above and therefore does not enlarge
-      # every fixed non-DE capacity.
-      bound_clip_tolerance: 0.05
-      capacity_manifest: resources/fixed_neighbor_endo_20260914_static_capacities.csv
-      reference_networks:
-        2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
-        2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
-        2035: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
-      # Fixed pathways share the endogenous reference history through 2030.
-      reuse_reference_horizons: [2030]
-      reuse_reference_runs:
-      - KN2045_Mix_FixedRenewables_BESS_15GW
-      - KN2045_Mix_FixedRenewables_BESS_35GW
-      - KN2045_Mix_FixedRenewables_BESS_55GW
     limits_capacity_max:
       Generator:
         onwind:
@@ -824,3 +810,15 @@ data:
   costs:
     source: primary
     version: latest
+
+# Common investment history and fleet; only 2035 is solved in this experiment.
+controlled_weather:
+  enable: true
+  planning_horizon: 2035
+  previous_horizon: 2030
+  previous_network: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
+  reference_network: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
+  weather_resources_directory: resources/thesis_weather_2023/KN2045_Mix_FixedRenewables
+  weather_profile_horizons: [2025, 2030]
+  domestic_country: DE
+  frozen_generator_carriers: [onwind, offwind-ac, offwind-dc, offwind-float, solar, solar-hsat, solar rooftop, ror]

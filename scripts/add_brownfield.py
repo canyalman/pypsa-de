@@ -29,17 +29,14 @@ FIXED_NEIGHBOR_WAS_EXTENDABLE = "fixed_neighbor_was_extendable"
 
 def _originally_or_currently_extendable(static, nominal_attr):
     """Return capacities that should retain extendable brownfield semantics."""
-    currently_extendable = static[f"{nominal_attr}_nom_extendable"].astype(
-        "boolean"
-    )
+    currently_extendable = static[f"{nominal_attr}_nom_extendable"].astype("boolean")
     originally_extendable = static.get(
         FIXED_NEIGHBOR_WAS_EXTENDABLE,
         pd.Series(False, index=static.index, dtype=bool),
     ).astype("boolean")
-    return (
-        currently_extendable.fillna(False).astype(bool)
-        | originally_extendable.fillna(False).astype(bool)
-    )
+    return currently_extendable.fillna(False).astype(
+        bool
+    ) | originally_extendable.fillna(False).astype(bool)
 
 
 def add_brownfield(
@@ -119,10 +116,7 @@ def add_brownfield(
         # remove assets if their optimized nominal capacity is lower than a threshold
         # since CHP heat Link is proportional to CHP electric Link, make sure threshold is compatible
         chp_heat = c.static.index[
-            (
-                brownfield_extendable
-                & c.static.index.str.contains("urban central")
-            )
+            (brownfield_extendable & c.static.index.str.contains("urban central"))
             & c.static.index.str.contains("CHP")
             & c.static.index.str.contains("heat")
         ]
@@ -409,6 +403,27 @@ if __name__ == "__main__":
     add_build_year_to_new_assets(n, year)
 
     n_p = pypsa.Network(snakemake.input.network_p)
+
+    controlled = snakemake.params.get("controlled_weather", {})
+    if controlled.get("enable", False):
+        from scripts.controlled_weather import refresh_brownfield_weather
+
+        vintage_weather = {
+            horizon: pypsa.Network(
+                snakemake.input[f"controlled_weather_vintage_{horizon}"]
+            )
+            for horizon in controlled["weather_profile_horizons"]
+        }
+        for horizon, weather_network in vintage_weather.items():
+            adjust_renewable_profiles(
+                weather_network, snakemake.input, snakemake.params, horizon
+            )
+        refresh_brownfield_weather(
+            n_p,
+            n,
+            vintage_weather,
+            dict(controlled, capacity_threshold=snakemake.params.threshold_capacity),
+        )
 
     update_heat_pump_efficiency(n, n_p, year)
 
