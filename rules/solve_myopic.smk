@@ -88,6 +88,18 @@ rule add_existing_baseyear:
         scripts("add_existing_baseyear.py")
 
 
+def controlled_weather_vintage_inputs(w):
+    controlled = config_provider("controlled_weather", default={})(w)
+    if not controlled.get("enable", False):
+        return {}
+    return {
+        f"controlled_weather_vintage_{year}": resources(
+            f"networks/base_s_{{clusters}}_{{opts}}_{{sector_opts}}_{year}.nc"
+        )
+        for year in controlled["weather_profile_horizons"]
+    }
+
+
 def input_profile_tech_brownfield(w):
     return {
         f"profile_{tech}": resources("profile_{clusters}_" + tech + ".nc")
@@ -99,6 +111,11 @@ def input_profile_tech_brownfield(w):
 rule add_brownfield:
     input:
         unpack(input_profile_tech_brownfield),
+        unpack(controlled_weather_vintage_inputs),
+        controlled_weather_code=lambda w: (
+            "scripts/controlled_weather.py"
+            if config_provider("controlled_weather", "enable", default=False)(w) else []
+        ),
         simplify_busmap=resources("busmap_base_s.csv"),
         cluster_busmap=resources("busmap_base_s_{clusters}.csv"),
         network=lambda w: (
@@ -125,7 +142,10 @@ rule add_brownfield:
         )
     threads: 4
     resources:
-        mem_mb=10000,
+        mem_mb=lambda w: (
+            64000 if config_provider("controlled_weather", "enable", default=False)(w)
+            else 10000
+        ),
     params:
         H2_retrofit=config_provider("sector", "H2_retrofit"),
         H2_retrofit_capacity_per_CH4=config_provider(
@@ -137,6 +157,7 @@ rule add_brownfield:
         carriers=config_provider("electricity", "renewable_carriers"),
         heat_pump_sources=config_provider("sector", "heat_pump_sources"),
         tes=config_provider("sector", "tes"),
+        controlled_weather=config_provider("controlled_weather", default={}),
         dynamic_ptes_capacity=config_provider(
             "sector", "district_heating", "ptes", "dynamic_capacity"
         ),
@@ -157,6 +178,15 @@ rule solve_sector_network_myopic:
         co2_totals_name=resources("co2_totals.csv"),
         energy_totals=resources("energy_totals.csv"),
         fixed_neighbor_capacities=fixed_neighbor_capacity_manifest,
+        controlled_weather_reference=lambda w: (
+            config_provider("controlled_weather", "reference_network")(w)
+            if config_provider("controlled_weather", "enable", default=False)(w)
+            else []
+        ),
+        controlled_weather_code=lambda w: (
+            "scripts/controlled_weather.py"
+            if config_provider("controlled_weather", "enable", default=False)(w) else []
+        ),
     output:
         network=RESULTS
         + "networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}.nc",
