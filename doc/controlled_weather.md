@@ -1,5 +1,9 @@
 # Controlled weather-year experiment (2035)
 
+This branch activates the separate fixed-fleet dispatch mode. See
+[dispatch_weather.md](dispatch_weather.md) for the active design and commands.
+The capacity-expansion description below is retained for the original branches.
+
 | Branch | Prefix | Weather |
 | --- | --- | --- |
 | thesis-weather-controlled-1996 | thesis_weather_controlled_1996 | 1996 |
