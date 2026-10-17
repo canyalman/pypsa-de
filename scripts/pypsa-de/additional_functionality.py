@@ -1502,6 +1502,11 @@ def force_boiler_profiles_existing_per_load(n):
         n.links.carrier.str.contains("boiler")
         & ~n.links.carrier.str.contains("urban central")
         & ~n.links.p_nom_extendable
+        & ~n.links.get(
+            "weather_dispatch_was_extendable", pd.Series(False, index=n.links.index)
+        )
+        .fillna(False)
+        .astype(bool)
     ]
 
     if decentral_boilers.empty:
@@ -1552,6 +1557,11 @@ def force_boiler_profiles_existing_per_boiler(n):
         n.links.carrier.str.contains("boiler")
         & ~n.links.carrier.str.contains("urban central")
         & ~n.links.p_nom_extendable
+        & ~n.links.get(
+            "weather_dispatch_was_extendable", pd.Series(False, index=n.links.index)
+        )
+        .fillna(False)
+        .astype(bool)
     ]
 
     if decentral_boilers.empty:
@@ -1802,6 +1812,11 @@ def finalize_network_after_solve(n, snakemake):
         ),
     }
 
+    from scripts.dispatch_weather import dispatch_result_summary, is_dispatch_weather
+
+    if is_dispatch_weather(snakemake.config):
+        n.meta["dispatch_weather_result"] = dispatch_result_summary(n)
+
     controlled = getattr(n, "_controlled_weather_summary", None)
     if controlled is not None:
         controlled = dict(controlled)
@@ -1820,6 +1835,16 @@ def finalize_network_after_solve(n, snakemake):
 def prepare_network_before_model(n, snakemake):
     """Apply optional PyPSA-DE network changes before Linopy model creation."""
     prepare_fixed_co2_price(n, snakemake)
+    from scripts.dispatch_weather import is_dispatch_weather, validate_dispatch_weather
+
+    if is_dispatch_weather(getattr(snakemake, "config", {})):
+        validate_dispatch_weather(n)
+        price = active_fixed_co2_price(snakemake)
+        if not np.isclose(
+            price, n.meta["dispatch_weather_prepared"]["reference_co2_price_eur_per_t"]
+        ):
+            raise ValueError("Dispatch CO2 price differs from the common reference.")
+        return
     constraints = snakemake.params.solving["constraints"]
     fixed_neighbor = constraints.get("fixed_neighbor_capacities", {})
     if not fixed_neighbor.get("enable", False):
@@ -1958,6 +1983,11 @@ def additional_functionality(n, snapshots, snakemake):
         logger.warning("No national CO2 budget specified!")
 
     validate_fixed_co2_price_model(n, snakemake)
+
+    from scripts.dispatch_weather import is_dispatch_weather, validate_dispatch_weather
+
+    if is_dispatch_weather(snakemake.config):
+        validate_dispatch_weather(n, model=True)
 
     if investment_year == 2020:
         adapt_nuclear_output(n)

@@ -73,7 +73,9 @@ def test_controlled_config_preserves_the_reference_assumptions(effective_config)
     year = pd.Timestamp(c["snapshots"]["start"]).year
     assert year in [1996, 2010, 2023]
     assert c["run"]["name"] == [SCENARIO]
-    assert c["run"]["prefix"] == f"thesis_weather_controlled_{year}"
+    dispatch = c["controlled_weather"].get("mode") == "dispatch"
+    label = "dispatch" if dispatch else "controlled"
+    assert c["run"]["prefix"] == f"thesis_weather_{label}_{year}"
     assert c["run"]["shared_resources"]["policy"] is False
     assert c["scenario"]["planning_horizons"] == [2025, 2030, 2035]
     assert c["clustering"]["temporal"]["resolution_sector"] == "3H"
@@ -89,6 +91,7 @@ def test_controlled_config_preserves_the_reference_assumptions(effective_config)
     limits = c["solving"]["constraints"]
     assert limits["fixed_co2_price"] == {"enable": True, "planning_horizons": [2035]}
     assert limits["fixed_neighbor_capacities"]["formulation"] == "static"
+    assert limits["fixed_neighbor_capacities"]["enable"] is not dispatch
     for component, carrier in [("Store", "battery"), ("Link", "battery discharger")]:
         for bound in ["limits_capacity_min", "limits_capacity_max"]:
             assert 2035 not in limits[bound].get(component, {}).get(carrier, {}).get(
@@ -439,6 +442,8 @@ def test_actual_preflight_script_checks_network_without_an_lp(
         ]
     ).to_csv(manifest, index=False)
     config = copy.deepcopy(effective_config)
+    config["controlled_weather"]["mode"] = "capacity_expansion"
+    config["solving"]["constraints"]["fixed_neighbor_capacities"]["enable"] = True
     config["controlled_weather"]["reference_network"] = str(reference_path)
     config["solving"]["constraints"]["fixed_neighbor_capacities"]["reference_networks"][
         2035

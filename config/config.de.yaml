@@ -4,7 +4,7 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: thesis_weather_controlled_2010
+  prefix: thesis_weather_dispatch_2010
   name:
   # - ExPol
   # - KN2045_Mix
@@ -439,6 +439,7 @@ solving:
   mem_mb: 70000 #30000 is OK for 22 nodes, 365H; 140000 for 22 nodes 3H; 400000 for 44 nodes 3H
   options:
     transmission_losses: true
+    noisy_costs: false # the solved reference already includes the seeded cost perturbation
     custom_extra_functionality: "../scripts/pypsa-de/additional_functionality.py"
     assign_all_duals: true
     skip_iterations: true # settings for post-discretization: false
@@ -466,7 +467,7 @@ solving:
       enable: true
       planning_horizons: [2035]
     fixed_neighbor_capacities:
-      enable: true
+      enable: false # every country is fixed directly from the complete solved 2035 fleet
       formulation: static
       domestic_country: DE
       strict_asset_match: true
@@ -814,6 +815,10 @@ data:
 # Common investment history and fleet; only 2035 is solved in this experiment.
 controlled_weather:
   enable: true
+  mode: dispatch
+  nominal_clip_tolerance: 0.05
+  dispatch_unserved_energy: true
+  dispatch_unserved_energy_cost: 100000.0
   planning_horizon: 2035
   previous_horizon: 2030
   previous_network: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc

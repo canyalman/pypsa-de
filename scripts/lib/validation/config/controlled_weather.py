@@ -1,12 +1,18 @@
 # SPDX-License-Identifier: MIT
 
-from pydantic import Field, model_validator
+from typing import Literal
+
+from pydantic import Field, NonNegativeFloat, PositiveFloat, model_validator
 
 from scripts.lib.validation.config._base import ConfigModel
 
 
 class ControlledWeatherConfig(ConfigModel):
     enable: bool = False
+    mode: Literal["capacity_expansion", "dispatch"] = "capacity_expansion"
+    dispatch_unserved_energy: bool = True
+    dispatch_unserved_energy_cost: PositiveFloat = 100000.0
+    nominal_clip_tolerance: NonNegativeFloat = 0.05
     planning_horizon: int = Field(2035, strict=True)
     previous_horizon: int = Field(2030, strict=True)
     previous_network: str = ""
