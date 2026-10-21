@@ -54,6 +54,7 @@ def asset_stem(name):
     for system in ("rural", "urban decentral"):
         for sector in ("residential", "services"):
             name = name.replace(f" {system} {sector} ", f" {system} ")
+            name = name.replace(f" {sector} {system} ", f" {system} ")
     return name
 
 
