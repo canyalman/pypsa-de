@@ -12,6 +12,13 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def is_input_attribute(component, attribute):
+    """Custom solver variables/duals may be exported without schema entries."""
+    return attribute in component.defaults.index and "Input" in str(
+        component.defaults.at[attribute, "status"]
+    )
+
+
 def calendar_keys(index):
     index = pd.DatetimeIndex(index)
     if index.empty or index.hasnans or len(index.year.unique()) != 1:
@@ -79,19 +86,29 @@ def refresh_brownfield_weather(previous, current, vintage_weather, settings):
     if not np.allclose(weights, current.snapshot_weightings):
         raise ValueError("Reference and weather snapshot weights differ.")
     inputs = {}
-    for c in previous.components:
+    for c in previous.components.values():
+        auxiliary = [
+            a for a, v in c.dynamic.items() if not v.empty and a not in c.defaults.index
+        ]
+        if auxiliary:
+            logger.info(
+                "Discarding previous %s auxiliary solution series: %s",
+                c.name,
+                auxiliary,
+            )
         for attribute, values in c.dynamic.items():
-            if values.empty or "Input" not in str(c.defaults.at[attribute, "status"]):
+            if values.empty or not is_input_attribute(c, attribute):
                 continue
             inputs[c.name, attribute] = align_calendar(values, current.snapshots)
 
     # Outputs (dispatch, energy and SOC) are not an input to a new planning year.
     previous.set_snapshots(current.snapshots)
     previous.snapshot_weightings = weights
-    for c in previous.components:
+    for c in previous.components.values():
         for attribute in c.dynamic:
             c.dynamic[attribute] = inputs.get(
-                (c.name, attribute), pd.DataFrame(index=current.snapshots)
+                (c.name, attribute),
+                pd.DataFrame(index=current.snapshots, columns=c.static.index[:0]),
             )
 
     horizons = sorted(vintage_weather)
@@ -148,9 +165,9 @@ def refresh_brownfield_weather(previous, current, vintage_weather, settings):
 
 
 def validate_input_series(n):
-    for c in n.components:
+    for c in n.components.values():
         for attribute, values in c.dynamic.items():
-            if values.empty or "Input" not in str(c.defaults.at[attribute, "status"]):
+            if values.empty or not is_input_attribute(c, attribute):
                 continue
             if not values.index.equals(n.snapshots):
                 raise ValueError(f"Wrong snapshot index: {c.name}.{attribute}.")
@@ -319,5 +336,13 @@ def cached_weather_resources(directory):
         for p in root.rglob("*")
         if p.is_file()
         and "networks" not in p.relative_to(root).parts
+        and "preflight" not in p.relative_to(root).parts
+        and not p.name.startswith(
+            (
+                "controlled_weather_preflight_",
+                "dispatch_weather_fleet_",
+                "fixed_neighbor_",
+            )
+        )
         and p.suffix in {".nc", ".csv", ".geojson", ".tif", ".json"}
     )

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-from scripts.controlled_weather import cached_weather_resources
+from scripts.weather_workflow import reusable_weather_resources
 
 controlled_settings = config.get("controlled_weather", {})
 if controlled_settings.get("enable", False):
@@ -26,7 +26,7 @@ if controlled_settings.get("enable", False):
         wildcard_constraints:
             planning_horizons="2035",
         log:
-            logs("controlled_weather_preflight_{clusters}_{opts}_{sector_opts}_2035.log"),
+            logs("controlled_weather_preflight_{clusters}_{opts}_{sector_opts}_{planning_horizons}.log"),
         params:
             solving=config_provider("solving"),
         threads: 1
@@ -37,7 +37,9 @@ if controlled_settings.get("enable", False):
             scripts("pypsa-de/check_controlled_weather.py")
 
     source_weather_resources = Path(controlled_settings["weather_resources_directory"])
-    weather_resource_names = cached_weather_resources(source_weather_resources)
+    weather_resource_names = reusable_weather_resources(
+        source_weather_resources, list(workflow.rules), resources("")
+    )
     if weather_resource_names:
         import re
 
