@@ -242,11 +242,12 @@ rule all:
         lambda w: balance_map_paths("interactive", w),
 
 
-rule create_scenarios:
-    output:
-        config["run"]["scenarios"]["file"],
-    script:
-        "config/create_scenarios.py"
+if not config.get("controlled_weather", {}).get("enable", False):
+    rule create_scenarios:
+        output:
+            config["run"]["scenarios"]["file"],
+        script:
+            "config/create_scenarios.py"
 
 
 rule purge:

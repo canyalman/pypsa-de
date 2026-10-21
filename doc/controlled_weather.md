@@ -1,5 +1,8 @@
 # Controlled weather-year experiment (2035)
 
+For reproducible cache handling, preflight/solve commands and Slurm status
+checks, see [Weather cluster runs](weather_cluster_runs.md).
+
 | Branch | Prefix | Weather |
 | --- | --- | --- |
 | thesis-weather-controlled-1996 | thesis_weather_controlled_1996 | 1996 |
