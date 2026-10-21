@@ -143,6 +143,21 @@ def test_dispatch_preserves_complete_fleet_and_ages_but_replaces_weather(year):
     assert ledger.annualized_capex_eur.sum() == 33
 
 
+@pytest.mark.parametrize("year", [1996, 2010, 2023])
+def test_dispatch_discards_auxiliary_results_without_changing_reference(year):
+    reference, weather = fixture_pair(year)
+    for component, attribute in [("Link", "p-incoming-DE-aux-pos"), ("Line", "mu_pos")]:
+        reference.components[component].dynamic[attribute] = pd.DataFrame(
+            1.0, index=reference.snapshots, columns=["old auxiliary result"]
+        )
+    n, ledger = build_dispatch_weather(reference, weather, settings())
+    assert n.links_t["p-incoming-DE-aux-pos"].empty
+    assert n.lines_t["mu_pos"].empty
+    assert not reference.links_t["p-incoming-DE-aux-pos"].empty
+    assert n.generators.at["DE0 OCGT-2035", "p_nom"] == 5
+    assert ledger.annualized_capex_eur.sum() == 33
+
+
 def test_all_six_nominal_component_groups_are_frozen():
     n, _ = fixture_pair()
     n.add(
