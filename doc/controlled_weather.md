@@ -1,5 +1,8 @@
 # Controlled weather-year experiment (2035)
 
+For reproducible cache handling, preflight/solve commands and Slurm status
+checks, see [Weather cluster runs](weather_cluster_runs.md).
+
 This branch activates the separate fixed-fleet dispatch mode. See
 [dispatch_weather.md](dispatch_weather.md) for the active design and commands.
 The capacity-expansion description below is retained for the original branches.

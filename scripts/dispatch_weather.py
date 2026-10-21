@@ -10,7 +10,11 @@ import numpy as np
 import pandas as pd
 from pypsa.descriptors import nominal_attrs
 
-from scripts.controlled_weather import align_calendar, validate_input_series
+from scripts.controlled_weather import (
+    align_calendar,
+    is_input_attribute,
+    validate_input_series,
+)
 
 logger = logging.getLogger(__name__)
 MARKER = "weather_dispatch_was_extendable"
@@ -174,16 +178,17 @@ def build_dispatch_weather(reference, weather, settings):
     ledger = fix_reference_fleet(n, settings.get("nominal_clip_tolerance", 0.05))
     inputs = {
         (c.name, a): align_calendar(v, weather.snapshots)
-        for c in n.components
+        for c in n.components.values()
         for a, v in c.dynamic.items()
-        if not v.empty and "Input" in str(c.defaults.at[a, "status"])
+        if not v.empty and is_input_attribute(c, a)
     }
     n.set_snapshots(weather.snapshots)
     n.snapshot_weightings = weather.snapshot_weightings.copy()
-    for c in n.components:
+    for c in n.components.values():
         for attribute in c.dynamic:
             c.dynamic[attribute] = inputs.get(
-                (c.name, attribute), pd.DataFrame(index=n.snapshots)
+                (c.name, attribute),
+                pd.DataFrame(index=n.snapshots, columns=c.static.index[:0]),
             )
 
     _replace_weather_attribute(n, weather, "Load", "p_set", n.loads.index)

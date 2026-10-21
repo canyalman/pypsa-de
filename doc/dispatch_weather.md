@@ -1,5 +1,8 @@
 # Fixed-fleet 2035 weather dispatch
 
+For reproducible cache handling, preflight/solve commands and Slurm status
+checks, see [Weather cluster runs](weather_cluster_runs.md).
+
 | Branch | Prefix |
 | --- | --- |
 | thesis-weather-dispatch-1996 | thesis_weather_dispatch_1996 |
