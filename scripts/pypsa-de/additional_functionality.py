@@ -1838,7 +1838,7 @@ def prepare_network_before_model(n, snakemake):
     from scripts.dispatch_weather import is_dispatch_weather, validate_dispatch_weather
 
     if is_dispatch_weather(getattr(snakemake, "config", {})):
-        validate_dispatch_weather(n)
+        validate_dispatch_weather(n, settings=snakemake.config["controlled_weather"])
         price = active_fixed_co2_price(snakemake)
         if not np.isclose(
             price, n.meta["dispatch_weather_prepared"]["reference_co2_price_eur_per_t"]

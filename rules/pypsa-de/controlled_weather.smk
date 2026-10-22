@@ -10,6 +10,7 @@ if controlled_settings.get("enable", False):
                 weather=resources("networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_final.nc"),
                 reference=controlled_settings["reference_network"],
                 helper="scripts/dispatch_weather.py",
+                accounting_helper="scripts/weather_accounting.py",
                 calendar_helper="scripts/controlled_weather.py",
             output:
                 network=resources("networks/base_s_{clusters}_{opts}_{sector_opts}_{planning_horizons}_dispatch.nc"),
@@ -44,6 +45,7 @@ if controlled_settings.get("enable", False):
             controlled_weather_reference=controlled_settings["reference_network"],
             helper="scripts/controlled_weather.py",
             dispatch_helper="scripts/dispatch_weather.py",
+            accounting_helper="scripts/weather_accounting.py",
             additional="scripts/pypsa-de/additional_functionality.py",
         output:
             resources("controlled_weather_preflight_{clusters}_{opts}_{sector_opts}_{planning_horizons}.json"),
