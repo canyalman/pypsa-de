@@ -814,6 +814,9 @@ data:
 # Common investment history and fleet; only 2035 is solved in this experiment.
 controlled_weather:
   enable: true
+  foreign_heat_unserved_energy: true
+  foreign_heat_unserved_energy_cost: 100000.0  # EUR/MWhth; reported separately from resource costs
+  resize_foreign_transport_oil_delivery: true
   planning_horizon: 2035
   previous_horizon: 2030
   previous_network: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
