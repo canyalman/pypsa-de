@@ -819,6 +819,7 @@ controlled_weather:
   nominal_clip_tolerance: 0.05
   dispatch_unserved_energy: true
   dispatch_unserved_energy_cost: 100000.0
+  resize_transport_oil_delivery: true
   planning_horizon: 2035
   previous_horizon: 2030
   previous_network: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc

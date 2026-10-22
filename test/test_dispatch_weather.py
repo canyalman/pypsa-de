@@ -109,6 +109,7 @@ def settings():
         "frozen_generator_carriers": ["solar"],
         "dispatch_unserved_energy": True,
         "dispatch_unserved_energy_cost": 100000.0,
+        "resize_transport_oil_delivery": True,
     }
 
 
@@ -283,6 +284,7 @@ def test_config_is_dispatch_only_with_unchanged_reference_and_carbon_price(
     assert not c["solving"]["options"]["noisy_costs"]
     assert not c["solving"]["options"]["load_shedding"]["enable"]
     assert c["controlled_weather"]["dispatch_unserved_energy_cost"] == 100000
+    assert c["controlled_weather"]["resize_transport_oil_delivery"] is True
     assert c["sector"]["bev_dsm_availability"] == {2030: 0.2, 2035: 0.35}
     assert c["costs"]["emission_prices"]["co2"][2035] == PRICE
 

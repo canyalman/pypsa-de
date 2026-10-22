@@ -66,6 +66,7 @@ def fixture_workflow(tmp_path, cache_files=(), dispatch=False):
     for relative in [
         "scripts/controlled_weather.py",
         "scripts/weather_workflow.py",
+        "scripts/weather_accounting.py",
         "scripts/pypsa-de/additional_functionality.py",
         "scripts/dispatch_weather.py",
         "reference_2035.nc",

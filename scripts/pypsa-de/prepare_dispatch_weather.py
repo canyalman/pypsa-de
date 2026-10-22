@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Replace operating weather inputs in the solved 2035 fleet, never its capacities."""
+"""Transfer weather to the fixed physical fleet with audited oil accounting."""
 
 import pypsa
 
