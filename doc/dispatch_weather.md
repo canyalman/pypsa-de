@@ -10,8 +10,9 @@ checks, see [Weather cluster runs](weather_cluster_runs.md).
 | thesis-weather-dispatch-2023 | thesis_weather_dispatch_2023 |
 
 These are separate from the controlled capacity-expansion branches. Every
-country's complete generation, conversion, storage power/energy and network
-capacity is fixed from this solved reference:
+country's physical generation, conversion, storage power/energy and network
+capacity is fixed from this solved reference. The audited non-physical oil
+accounting exception is described below:
 
 ```text
 cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2035.nc
@@ -37,8 +38,10 @@ profiles follow the new year. Leap day is dropped, yielding 2920 3H steps.
 Reference nominal capacities and costs are copied, never inferred from target
 weather candidates. Solver-negative nominal residuals no larger than 0.05 are
 clipped to zero and logged, following the existing nominal bound-clip allowance;
-larger negatives are rejected. No new capacity
-headroom is added. The fleet fingerprint is checked after export/import and
+larger negatives are rejected. No physical capacity
+headroom is added. Reference and prepared fingerprints are recorded separately
+so the accounting exception remains visible. The prepared fleet fingerprint is
+checked after export/import and
 before solving; all six nominal variable groups must be non-extendable and the
 LP must have no nominal investment variables. Missing positive-capacity profile
 matches, bus country/carrier/location mismatches, invalid snapshots or NaNs fail
@@ -52,6 +55,32 @@ an existing-boiler profile restriction merely because their capacity is fixed.
 `noisy_costs` is disabled only because the solved reference already contains
 the native seeded perturbation; adding it again would change the cost inputs.
 
+## Final oil accounting connectors
+
+All three dispatch configs enable
+`controlled_weather.resize_transport_oil_delivery: true`.
+The native `land transport oil` Link delivers oil to a dedicated final-demand
+bus and records its CO2 emissions. It has zero CAPEX and no physical capacity
+investment trade-off. Its optimised nominal value in the reference is just the
+2013-weather peak flow, not a fuel-infrastructure adequacy limit.
+
+After transferring the unchanged target-weather demand profile, only such
+zero-CAPEX, zero-length, unit-efficiency, dedicated accounting Links may have
+their **fixed** nominal value raised to the new demand peak. This applies in
+Germany too: unlike controlled capacity expansion, dispatch otherwise freezes
+German accounting Links as well. No investment variable is reopened. A priced
+investment, non-standard topology, incompatible efficiency or binding native
+nominal upper limit is not silently relaxed.
+
+Fuel consumption, marginal cost (including reference cost noise) and the CO2
+output port remain intact. Reference NCs and manifests are not edited.
+`oil_delivery_accounting_adjustments` in the prepared/final metadata lists every
+asset, country, previous/applied capacity and reason; the fleet CSV retains both
+reference and applied nominal values. Zero CAPEX leaves the fleet cost constant
+unchanged. Other physical plant and network capacities remain at the reference.
+Without this exception, unmet transport fuel demand could misleadingly appear
+as a physical weather-related energy shortage.
+
 ## Unserved demand and cost reporting
 
 An explicit diagnostic slack is enabled, with a penalty of 100000 EUR/MWh for
@@ -62,11 +91,38 @@ electricity, hydrogen or CO2 supply. Its generator carrier is
 Any shortage must be reported, not presented as an adequately supplied system.
 No stochastic outages or probabilistic LOLE are modelled.
 
+This existing slack scope remains **all countries and all positive final-demand
+carriers**, not just non-DE heat. No new heat-only slack or load reduction is
+introduced. A finite high penalty discourages avoidable shedding but is not a
+proof that every shortfall is technically unavoidable. It can affect dispatch
+and prices even when excluded from reported costs.
+
 After solving, `n.meta.dispatch_weather_result` records unserved energy by country
 and bus carrier, its penalty, the operating objective, the operating objective
 without that penalty, and operating cost plus the common fleet CAPEX constant.
 Do not compare raw objectives to capacity-expansion objectives as total costs.
 The native fixed-carbon-price metadata separately identifies CO2 payments.
+The legacy `objective_including_reference_capex_eur` still includes the penalty
+and CO2 payments. The new
+`objective_including_reference_capex_excluding_unserved_penalty_eur` removes the
+penalty, while
+`objective_including_reference_capex_excluding_co2_and_unserved_penalty_eur`
+additionally excludes carbon payments. Always report missing service alongside
+these costs; lower costs with unserved demand are not equivalent to full service.
+
+`unserved_energy_by_bus` and `unserved_energy_by_country_carrier` additionally
+report demand, unserved energy, percentage, weighted shortage hours and peak
+simultaneous shortage. Country/carrier peaks are calculated from summed hourly
+shortfalls, not by summing each bus's individual peak. Keep heat, electricity
+and fuel carriers separate when interpreting service adequacy.
+`hours_with_any_unserved_final_demand` is the duration of any detected shortage,
+not a probabilistic reliability metric. An active-hour threshold of 0.001 MW
+(one kW) avoids counting solver noise; positive shortfall energy is still counted
+below that threshold. Three-hour steps carry three hours. Energy/hour accounting
+uses physical weights, while penalty and CO2 payments use objective weights.
+Missing/non-finite solved series or shortfalls above demand fail reporting
+rather than silently becoming zero.
+
 Full-year perfect foresight is retained; this is an operational stress test,
 not a realistic trading backtest or a multi-weather robust investment design.
 
@@ -99,3 +155,14 @@ Replace the year for the other branches. Profile/brownfield/preflight preparatio
 requests 64 GB; keep the usual solve memory/time settings. Do not switch a
 checkout used by a running workflow. A local test or preflight is not evidence
 that the real cluster optimisation completed optimally.
+
+For an existing checkout with ready scenarios and weather profiles, this repair
+requires rerunning only `prepare_dispatch_weather_network`, the preflight and
+the failed/new 2035 solve. The prepared `_dispatch.nc` must be regenerated to
+include audited accounting connectors; reuse the unchanged `_2035_final.nc`
+candidate and weather preprocessing. No new 2025/2030 solve, `build_scenarios`,
+forced `add_brownfield` or weather-profile regeneration is required solely for
+these changes. Do not update a checkout underneath active jobs.
+The pre-model validator rejects an older prepared network when its recorded
+accounting option differs from the current config, with an explicit instruction
+to regenerate `_dispatch.nc` before any optimisation starts.

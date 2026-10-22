@@ -15,10 +15,12 @@ from scripts.controlled_weather import (
     is_input_attribute,
     validate_input_series,
 )
+from scripts.weather_accounting import resize_transport_oil_delivery
 
 logger = logging.getLogger(__name__)
 MARKER = "weather_dispatch_was_extendable"
 SHEDDING = "weather demand shedding"
+SHORTFALL_HOUR_THRESHOLD_MW = 0.001
 
 
 def fleet_fingerprint(n):
@@ -112,10 +114,18 @@ def _replace_weather_attribute(n, weather, component, attribute, assets):
     n.components[component].dynamic[attribute].loc[:, assets] = values
 
 
+def positive_final_demand(n):
+    demand = n.get_switchable_as_dense("Load", "p_set").mul(-n.loads.sign).clip(lower=0)
+    if not np.isfinite(demand.to_numpy()).all():
+        raise ValueError("Non-finite final demand in weather dispatch inputs.")
+    return demand.T.groupby(n.loads.bus).sum().T
+
+
 def add_demand_shedding(n, penalty):
     """Slack is bounded by actual positive final demand, never an unlimited plant."""
-    demand = n.get_switchable_as_dense("Load", "p_set").mul(-n.loads.sign).clip(lower=0)
-    demand = demand.T.groupby(n.loads.bus).sum().T
+    if not np.isfinite(penalty) or penalty <= 0:
+        raise ValueError("Unserved demand penalty must be positive and finite.")
+    demand = positive_final_demand(n)
     peaks = demand.max()
     peaks = peaks[peaks.gt(0)]
     if peaks.empty:
@@ -176,6 +186,7 @@ def build_dispatch_weather(reference, weather, settings):
         raise ValueError("Dispatch reference and weather snapshot weights differ.")
     n = reference.copy()
     ledger = fix_reference_fleet(n, settings.get("nominal_clip_tolerance", 0.05))
+    reference_fingerprint = fleet_fingerprint(n)
     inputs = {
         (c.name, a): align_calendar(v, weather.snapshots)
         for c in n.components.values()
@@ -236,6 +247,20 @@ def build_dispatch_weather(reference, weather, settings):
                     assets = assets.intersection(buses.index[buses.ne("")])
             _replace_weather_attribute(n, weather, component, attribute, assets)
 
+    oil_adjustments = []
+    if settings.get("resize_transport_oil_delivery", False):
+        oil_adjustments = resize_transport_oil_delivery(n)
+        for change in oil_adjustments:
+            entries = ledger.index[
+                ledger.component.eq("Link") & ledger.asset.eq(change["asset"])
+            ]
+            if len(entries) != 1:
+                raise ValueError(
+                    f"Oil accounting link missing from dispatch fleet ledger: {change['asset']}."
+                )
+            i = entries[0]
+            ledger.at[i, "fixed_nominal"] = change["applied_nominal_mw"]
+            ledger.at[i, "weather_accounting_adjustment_mw"] = change["increase_mw"]
     if settings.get("dispatch_unserved_energy", True):
         add_demand_shedding(n, settings["dispatch_unserved_energy_cost"])
     validate_input_series(n)
@@ -248,7 +273,12 @@ def build_dispatch_weather(reference, weather, settings):
             -reference.global_constraints.at["CO2Limit", "mu"]
         ),
         "fixed_asset_count": len(ledger),
+        "reference_fixed_fleet_fingerprint": reference_fingerprint,
         "fixed_fleet_fingerprint": fleet_fingerprint(n),
+        "resize_transport_oil_delivery": settings.get(
+            "resize_transport_oil_delivery", False
+        ),
+        "oil_delivery_accounting_adjustments": oil_adjustments,
         "demand_shedding_enabled": settings.get("dispatch_unserved_energy", True),
         "unserved_energy_penalty": settings["dispatch_unserved_energy_cost"],
         "storage_boundaries": "Reference cyclic and initial-state inputs retained; solved SOC discarded.",
@@ -258,10 +288,19 @@ def build_dispatch_weather(reference, weather, settings):
     return n, ledger
 
 
-def validate_dispatch_weather(n, model=False):
+def validate_dispatch_weather(n, model=False, settings=None):
     if "dispatch_weather_prepared" not in n.meta:
         raise ValueError(
             "Missing dispatch preparation audit; do not solve the capacity-expansion network."
+        )
+    if settings is not None and settings.get(
+        "resize_transport_oil_delivery", False
+    ) != n.meta["dispatch_weather_prepared"].get(
+        "resize_transport_oil_delivery", False
+    ):
+        raise ValueError(
+            "Dispatch oil accounting setting differs from the prepared network; "
+            "regenerate the _dispatch.nc with prepare_dispatch_weather_network."
         )
     for component, nominal in nominal_attrs.items():
         if n.components[component].static[nominal + "_extendable"].any():
@@ -283,20 +322,32 @@ def validate_dispatch_weather(n, model=False):
 def dispatch_result_summary(n):
     result = dict(n.meta["dispatch_weather_prepared"])
     assets = n.generators.index[n.generators.carrier.eq(SHEDDING)]
-    p = n.generators_t.p.reindex(columns=assets, fill_value=0).clip(lower=0)
+    p = n.generators_t.p.reindex(index=n.snapshots, columns=assets).clip(lower=0)
+    if not np.isfinite(p.to_numpy()).all():
+        raise ValueError("Missing/non-finite solved unserved-demand values.")
+    buses = n.generators.loc[assets, "bus"]
+    demand = positive_final_demand(n)
+    if not buses.isin(demand.columns).all() or buses.duplicated().any():
+        raise ValueError(
+            "Unserved-demand generators do not match positive final-demand buses."
+        )
+    bounds = demand.reindex(columns=buses.to_numpy())
+    bounds.columns = assets
+    if (p - bounds).gt(SHORTFALL_HOUR_THRESHOLD_MW).any().any():
+        raise ValueError("Solved unserved energy exceeds actual final demand.")
     energies = p.mul(n.snapshot_weightings.generators, axis=0).sum()
     penalties = (
-        p.mul(n.generators.loc[assets, "marginal_cost"], axis=1)
+        p.mul(n.get_switchable_as_dense("Generator", "marginal_cost", inds=assets))
         .mul(n.snapshot_weightings.objective, axis=0)
         .to_numpy()
         .sum()
     )
-    buses = n.generators.loc[assets, "bus"]
     groups = pd.DataFrame(
         {
             "energy": energies,
-            "country": buses.map(n.buses.country),
+            "country": buses.map(n.buses.country).fillna(""),
             "carrier": buses.map(n.buses.carrier),
+            "bus": buses,
         }
     )
     result["unserved_energy_mwh_by_country_carrier"] = {
@@ -305,6 +356,44 @@ def dispatch_result_summary(n):
         .energy.sum()
         .items()
     }
+
+    def metrics(power, required):
+        energy = float(power.dot(n.snapshot_weightings.generators))
+        demand_energy = float(required.dot(n.snapshot_weightings.generators))
+        return {
+            "unserved_mwh": energy,
+            "demand_mwh": demand_energy,
+            "unserved_share_pct": 100 * energy / demand_energy
+            if demand_energy
+            else 0.0,
+            "hours": float(
+                power.gt(SHORTFALL_HOUR_THRESHOLD_MW).dot(
+                    n.snapshot_weightings.generators
+                )
+            ),
+            "peak_mw": float(power.max()),
+        }
+
+    result["unserved_energy_by_bus"] = {
+        bus: {
+            "country": groups.at[asset, "country"],
+            "carrier": groups.at[asset, "carrier"],
+            **metrics(p[asset], demand[bus]),
+        }
+        for asset, bus in buses.items()
+    }
+    result["unserved_energy_by_country_carrier"] = {
+        f"{country}|{carrier}": metrics(
+            p.loc[:, rows.index].sum(axis=1), demand.loc[:, rows.bus].sum(axis=1)
+        )
+        for (country, carrier), rows in groups.groupby(["country", "carrier"])
+    }
+    result["hours_with_any_unserved_final_demand"] = float(
+        p.gt(SHORTFALL_HOUR_THRESHOLD_MW)
+        .any(axis=1)
+        .dot(n.snapshot_weightings.generators)
+    )
+    result["unserved_energy_hour_threshold_mw"] = SHORTFALL_HOUR_THRESHOLD_MW
     result["unserved_energy_penalty_eur"] = float(penalties)
     result["operating_objective_eur"] = float(n.objective)
     result["operating_objective_excluding_unserved_penalty_eur"] = float(
@@ -312,5 +401,28 @@ def dispatch_result_summary(n):
     )
     result["objective_including_reference_capex_eur"] = float(
         n.objective + result["reference_annualized_capex_eur"]
+    )
+    result["objective_including_reference_capex_excluding_unserved_penalty_eur"] = (
+        float(n.objective + result["reference_annualized_capex_eur"] - penalties)
+    )
+    if "co2 atmosphere" not in n.stores_t.p:
+        raise ValueError(
+            "Missing solved CO2 atmosphere series for dispatch cost reporting."
+        )
+    emissions = -n.stores_t.p["co2 atmosphere"].reindex(n.snapshots)
+    if not np.isfinite(emissions.to_numpy()).all():
+        raise ValueError("Non-finite solved CO2 atmosphere series.")
+    carbon_payments = float(
+        result["reference_co2_price_eur_per_t"]
+        * emissions.dot(n.snapshot_weightings.objective)
+    )
+    result["co2_payments_in_objective_eur"] = carbon_payments
+    result[
+        "objective_including_reference_capex_excluding_co2_and_unserved_penalty_eur"
+    ] = float(
+        n.objective
+        + result["reference_annualized_capex_eur"]
+        - penalties
+        - carbon_payments
     )
     return result

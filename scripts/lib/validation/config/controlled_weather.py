@@ -11,7 +11,8 @@ class ControlledWeatherConfig(ConfigModel):
     enable: bool = False
     mode: Literal["capacity_expansion", "dispatch"] = "capacity_expansion"
     dispatch_unserved_energy: bool = True
-    dispatch_unserved_energy_cost: PositiveFloat = 100000.0
+    dispatch_unserved_energy_cost: PositiveFloat = Field(100000.0, allow_inf_nan=False)
+    resize_transport_oil_delivery: bool = False
     nominal_clip_tolerance: NonNegativeFloat = 0.05
     planning_horizon: int = Field(2035, strict=True)
     previous_horizon: int = Field(2030, strict=True)
