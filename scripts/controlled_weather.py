@@ -281,6 +281,27 @@ def prepare_controlled_weather(n, snakemake):
     foreign_ledger = pd.read_csv(
         foreign_path, dtype={"asset": str, "was_extendable": "boolean"}
     )
+    from scripts.controlled_weather_adequacy import (
+        add_foreign_heat_shortfall,
+        resize_foreign_oil_delivery,
+    )
+
+    oil_adjustments = resize_foreign_oil_delivery(n, settings)
+    for change in oil_adjustments:
+        entries = foreign_ledger.index[
+            foreign_ledger.component.eq("Link")
+            & foreign_ledger.asset.eq(change["asset"])
+        ]
+        if len(entries) != 1:
+            raise ValueError(
+                f"Oil accounting link missing from fixed-fleet ledger: {change['asset']}."
+            )
+        i = entries[0]
+        foreign_ledger.at[i, "applied_nominal"] = change["applied_nominal_mw"]
+        foreign_ledger.at[i, "bound_adjustment"] = (
+            change["applied_nominal_mw"] - foreign_ledger.at[i, "reference_nominal"]
+        )
+        foreign_ledger.at[i, "weather_accounting_adjustment_mw"] = change["increase_mw"]
     for i, row in foreign_ledger.iterrows():
         current_static = n.components[row.component].static
         reference_static = reference.components[row.component].static
@@ -323,7 +344,10 @@ def prepare_controlled_weather(n, snakemake):
             ledger.removed_annualized_capex_eur.sum()
         ),
         "renewable_capex_ledger": str(path),
+        "foreign_oil_delivery_adjustments": oil_adjustments,
+        "foreign_heat_shortfall": add_foreign_heat_shortfall(n, settings),
     }
+    validate_input_series(n)
     logger.info("Validated controlled-weather inputs and fixed German renewable fleet.")
 
 

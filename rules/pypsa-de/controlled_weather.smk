@@ -20,6 +20,7 @@ if controlled_settings.get("enable", False):
             fixed_neighbor_capacities=fixed_neighbor_capacity_manifest,
             controlled_weather_reference=controlled_settings["reference_network"],
             helper="scripts/controlled_weather.py",
+            adequacy="scripts/controlled_weather_adequacy.py",
             additional="scripts/pypsa-de/additional_functionality.py",
         output:
             resources("controlled_weather_preflight_{clusters}_{opts}_{sector_opts}_{planning_horizons}.json"),

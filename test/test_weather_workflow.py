@@ -65,6 +65,7 @@ def fixture_workflow(tmp_path, cache_files=(), dispatch=False):
         path.write_text("cached", encoding="utf-8")
     for relative in [
         "scripts/controlled_weather.py",
+        "scripts/controlled_weather_adequacy.py",
         "scripts/weather_workflow.py",
         "scripts/pypsa-de/additional_functionality.py",
         "scripts/dispatch_weather.py",
