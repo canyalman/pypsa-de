@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: MIT
 
-from pydantic import Field, model_validator
+from pydantic import Field, PositiveFloat, model_validator
 
 from scripts.lib.validation.config._base import ConfigModel
 
 
 class ControlledWeatherConfig(ConfigModel):
     enable: bool = False
+    foreign_heat_unserved_energy: bool = False
+    foreign_heat_unserved_energy_cost: PositiveFloat = Field(
+        100000.0, allow_inf_nan=False
+    )
+    resize_foreign_transport_oil_delivery: bool = False
     planning_horizon: int = Field(2035, strict=True)
     previous_horizon: int = Field(2030, strict=True)
     previous_network: str = ""

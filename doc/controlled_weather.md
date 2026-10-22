@@ -28,7 +28,9 @@ reference supplies non-DE nominal capacities and German wind/solar/ror and
 hydro/PHS capacities. German renewable node/asset/technology/vintage allocation
 is fixed, not just national totals. Native bounds and small numerical clipping
 checks are retained; meaningful mismatches fail rather than silently changing
-the reference. No old dispatch or SOC solution is fixed.
+the reference. No old dispatch or SOC solution is fixed. The narrowly audited
+final transport-oil accounting connector exception is described below; no
+physical foreign generation, storage or transmission capacity is released.
 
 Fixed location means the model's node/resource asset, not a reconstruction of
 individual power-plant coordinates. Native within-node profile aggregation is
@@ -107,13 +109,79 @@ if renewable preprocessing is needed, allow
 or preflight is not evidence of an optimal large-model solution: check the
 cluster solver status and resulting network after the real solve.
 
+After pulling only this adequacy repair, reuse the ready `_2035_final.nc` and
+weather profiles. No new `build_scenarios` or `add_brownfield` run is needed for
+these new pre-model options. Run preflight again (force
+`check_controlled_weather_network` if its prior report is still considered
+current), then rerun the failed `solve_sector_network_myopic` job with the
+usual explicit-hour Slurm settings. No cluster checkout is updated or job
+restarted by the local repair itself.
+
+## Foreign heat shortfalls and oil accounting
+
+All three controlled branches use the same explicit options:
+
+```yaml
+controlled_weather:
+  foreign_heat_unserved_energy: true
+  foreign_heat_unserved_energy_cost: 100000.0  # EUR/MWhth
+  resize_foreign_transport_oil_delivery: true
+```
+
+The reference fleet cannot necessarily serve cold-weather heat peaks in every
+foreign region. Heat demand is not clipped, reduced or shifted. Bounded slack
+is added only to non-DE `rural heat`, `urban decentral heat` and `urban central
+heat` final-demand buses. Each bound equals the sum of all local loads at that
+snapshot, including static agricultural heat. No slack is added for German
+demand, electricity, hydrogen, fuel supply, or the carbon balance. The helper
+carrier `controlled weather unserved heat` denotes **unserved demand**, never
+physical heat production or an investment.
+
+The finite high penalty discourages avoidable shedding; it is not a real payment
+or a proof that every shortfall is technically unavoidable. Do not call these
+the results of the original all-demand-served optimisation. Inspect shortages
+and affected prices explicitly. Reporting the penalty separately does not
+remove its influence on dispatch and prices.
+
+The native `land transport oil` Link is a zero-CAPEX, unit-efficiency oil
+delivery/CO2-accounting connector, not an electricity plant or a physical
+fuel-infrastructure investment. Freezing its optimised 2013 peak flow can
+artificially block temperature-dependent transport oil demand in a new weather
+year. For foreign dedicated final-demand connectors only, its **fixed** nominal
+value is increased, if needed, to that unchanged demand profile's peak. Fuel
+consumption, marginal costs (including native cost noise) and the CO2 output
+port remain intact. A non-standard, positive-CAPEX,
+physically bounded or non-dedicated Link fails rather than being silently
+relaxed. Domestic Links and all other carriers are untouched.
+
+The manifest/reference files stay unchanged. Adjusted accounting capacities and
+their reasons are recorded in the preflight report, final metadata and output
+fixed-neighbor ledger; their zero CAPEX cannot change the fixed-cost constant.
+
 ## Accounting and local regression tests
 
 The existing fixed-neighbor CAPEX ledger is retained. Fixed German renewable
 CAPEX removed from the variable objective has its own ledger. After solving,
 `n.meta.controlled_weather_result` records the objective corrected for both
 removed investment-cost constants, with a separate carbon-payment-excluded
-value. Do not compare old and new raw objectives directly.
+value. These legacy objective fields still include the shortage penalty. Do not
+compare old and new raw objectives directly.
+
+`n.meta.controlled_weather_result` additionally reports unserved heat in MWhth,
+its percentage of foreign heat demand, weighted hours with any shortage, peak
+simultaneous shortage and per-bus country/carrier details. Hours count dispatch
+above 0.001 MWth (one kW) to avoid counting solver noise; annual energy uses the
+positive dispatch without that filter. Three-hour snapshots carry three hours,
+not one. Penalties use objective weights, separately from physical-energy
+weights.
+
+For a cost comparison excluding both artificial shortfall penalties and carbon
+payments, use
+`objective_including_removed_fixed_capex_excluding_co2_and_unserved_heat_penalty_eur`.
+The penalty-only-excluded objective is also recorded. Always show the unmet
+heat quantity alongside these costs: cheaper service with missing demand is
+not equivalent to serving all demand. Physical fixed-plant CAPEX treatment,
+CO2 prices and import limits otherwise remain unchanged.
 
 Fixed-fleet capital costs are taken from the common reference as well; native
 weather-dependent within-node weighting must not change the reported CAPEX of
@@ -121,7 +189,8 @@ an unchanged fleet. Variable dispatch costs and weather-dependent efficiencies
 are not overwritten by this investment-cost correction.
 
 ```bash
-python -m pytest test/test_controlled_weather.py test/test_fixed_co2_price.py \
+python -m pytest test/test_controlled_weather.py test/test_controlled_weather_adequacy.py \
+  test/test_fixed_co2_price.py \
   test/test_fixed_neighbor_constraints.py test/test_battery_ac_pathways.py \
   test/test_german_conventional_capacity_pathway.py -q
 ```

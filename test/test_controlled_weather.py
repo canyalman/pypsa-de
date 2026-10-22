@@ -95,6 +95,9 @@ def test_controlled_config_preserves_the_reference_assumptions(effective_config)
                 "DE", {}
             )
     control = c["controlled_weather"]
+    assert control["foreign_heat_unserved_energy"] is True
+    assert control["foreign_heat_unserved_energy_cost"] == 100000.0
+    assert control["resize_foreign_transport_oil_delivery"] is True
     fixed = limits["fixed_neighbor_capacities"]
     assert control["previous_network"] == fixed["reference_networks"][2030]
     assert control["reference_network"] == fixed["reference_networks"][2035]
@@ -420,6 +423,24 @@ def test_actual_preflight_script_checks_network_without_an_lp(
             mu=-PRICE,
         )
         model.add("GlobalConstraint", "co2_limit-DE", constant=50, mu=0)
+        model.add("Bus", "FR0 heat", country="FR", carrier="rural heat")
+        model.add("Load", "FR0 heat", bus="FR0 heat", p_set=4)
+        model.add("Bus", "EU oil", carrier="oil")
+        model.add("Bus", "ES0 oil demand", country="ES", carrier="land transport oil")
+        model.add(
+            "Load", "ES0 oil demand", bus="ES0 oil demand", p_set=5 if model is n else 3
+        )
+        model.add(
+            "Link",
+            "ES0 oil delivery",
+            bus0="EU oil",
+            bus1="ES0 oil demand",
+            bus2="co2 atmosphere",
+            carrier="land transport oil",
+            efficiency2=0.27,
+            p_nom_extendable=True,
+            p_nom_opt=3,
+        )
     n.generators.at["FR0 solar-2035", "capital_cost"] = 99.0
     reference.generators.at["FR0 solar-2035", "capital_cost"] = 2.0
     reference_path = tmp_path / "reference_2035.nc"
@@ -435,7 +456,14 @@ def test_actual_preflight_script_checks_network_without_an_lp(
                 "asset": "FR0 solar-2035",
                 "nominal": 50.0,
                 "operational_nominal": 50.0,
-            }
+            },
+            {
+                "year": 2035,
+                "component": "Link",
+                "asset": "ES0 oil delivery",
+                "nominal": 3.0,
+                "operational_nominal": 3.0,
+            },
         ]
     ).to_csv(manifest, index=False)
     config = copy.deepcopy(effective_config)
@@ -468,6 +496,13 @@ def test_actual_preflight_script_checks_network_without_an_lp(
     assert result["status"] == "passed_without_solve"
     assert result["fixed_co2_price_eur_per_t"] == PRICE
     assert result["controlled_weather"]["fixed_domestic_renewable_assets"] == 1
+    assert result["controlled_weather"]["foreign_heat_shortfall"]["asset_count"] == 1
+    adjustment = result["controlled_weather"]["foreign_oil_delivery_adjustments"][0]
+    assert adjustment["asset"] == "ES0 oil delivery"
+    assert adjustment["applied_nominal_mw"] == 5
+    recorded_ledger = pd.read_csv(result["fixed_neighbor"]["capex_ledger"])
+    oil = recorded_ledger.loc[recorded_ledger.asset.eq("ES0 oil delivery")].iloc[0]
+    assert oil.reference_nominal == 3 and oil.applied_nominal == 5
     headroom = config["solving"]["constraints"]["fixed_neighbor_capacities"][
         "capacity_tolerance"
     ]

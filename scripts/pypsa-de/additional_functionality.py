@@ -1804,7 +1804,18 @@ def finalize_network_after_solve(n, snakemake):
 
     controlled = getattr(n, "_controlled_weather_summary", None)
     if controlled is not None:
+        from scripts.controlled_weather_adequacy import foreign_heat_result_summary
+
         controlled = dict(controlled)
+        controlled.update(
+            foreign_heat_result_summary(
+                n,
+                snakemake.config.get("controlled_weather", {}).get(
+                    "domestic_country", "DE"
+                ),
+            )
+        )
+        heat_penalty = controlled["unserved_heat_penalty_eur"]
         total_fixed = (
             fixed_capex + controlled["removed_annualized_domestic_renewable_capex_eur"]
         )
@@ -1814,6 +1825,15 @@ def finalize_network_after_solve(n, snakemake):
         controlled["objective_including_removed_fixed_capex_excluding_co2_eur"] = float(
             n.objective + total_fixed - carbon_payments
         )
+        controlled["objective_excluding_unserved_heat_penalty_eur"] = float(
+            n.objective - heat_penalty
+        )
+        controlled[
+            "objective_including_removed_fixed_capex_excluding_unserved_heat_penalty_eur"
+        ] = float(n.objective + total_fixed - heat_penalty)
+        controlled[
+            "objective_including_removed_fixed_capex_excluding_co2_and_unserved_heat_penalty_eur"
+        ] = float(n.objective + total_fixed - carbon_payments - heat_penalty)
         n.meta["controlled_weather_result"] = controlled
 
 
