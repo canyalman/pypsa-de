@@ -166,3 +166,11 @@ these changes. Do not update a checkout underneath active jobs.
 The pre-model validator rejects an older prepared network when its recorded
 accounting option differs from the current config, with an explicit instruction
 to regenerate `_dispatch.nc` before any optimisation starts.
+
+The post-solve metadata refresh preserves `dispatch_weather_prepared` for the
+finalizer and both the NetCDF and YAML exports. A missing preparation audit still
+fails validation/reporting; it is not replaced with an empty audit. For a run
+that solved optimally but failed here before exporting its result, this metadata
+repair alone requires rerunning the solve. It does not require regenerating an
+otherwise up-to-date `_dispatch.nc`, scenarios or weather profiles. Existing
+automatic retries running the old code do not contain this repair.
