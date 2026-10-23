@@ -1849,7 +1849,11 @@ if __name__ == "__main__":
             "Solving status 'warning'. Results may not be reliable. Aborting."
         )
 
+    # The dispatch finalizer needs the audit stored during network preparation.
+    dispatch_weather_prepared = n.meta.get("dispatch_weather_prepared")
     n.meta = dict(snakemake.config, **dict(wildcards=dict(snakemake.wildcards)))
+    if dispatch_weather_prepared is not None:
+        n.meta["dispatch_weather_prepared"] = dispatch_weather_prepared
     fixed_neighbor_summary = getattr(n, "_fixed_neighbor_static_summary", None)
     if fixed_neighbor_summary is not None:
         fixed_neighbor_summary = dict(fixed_neighbor_summary)
