@@ -4,11 +4,13 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: thesis_weather_controlled_2010
+  prefix: thesis_weather_bess_2010
   name:
   # - ExPol
   # - KN2045_Mix
-  - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -472,7 +474,7 @@ solving:
       strict_asset_match: true
       capacity_tolerance: 0.012
       bound_clip_tolerance: 0.05
-      capacity_manifest: resources/thesis_weather_controlled_2010/fixed_neighbor_capacities.csv
+      capacity_manifest: resources/thesis_weather_bess_2010/fixed_neighbor_capacities.csv
       reference_networks:
         2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
         2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc

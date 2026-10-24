@@ -72,8 +72,8 @@ def test_controlled_config_preserves_the_reference_assumptions(effective_config)
     c = effective_config
     year = pd.Timestamp(c["snapshots"]["start"]).year
     assert year in [1996, 2010, 2023]
-    assert c["run"]["name"] == [SCENARIO]
-    assert c["run"]["prefix"] == f"thesis_weather_controlled_{year}"
+    assert c["run"]["name"] == [f"{SCENARIO}_BESS_{power}GW" for power in (15, 35, 55)]
+    assert c["run"]["prefix"] == f"thesis_weather_bess_{year}"
     assert c["run"]["shared_resources"]["policy"] is False
     assert c["scenario"]["planning_horizons"] == [2025, 2030, 2035]
     assert c["clustering"]["temporal"]["resolution_sector"] == "3H"
@@ -344,12 +344,15 @@ def test_validation_rejects_wrong_reference_years(effective_config):
         ControlledWeatherConfig(**c)
 
 
+@pytest.mark.parametrize("power", [15, 35, 55])
 def test_workflow_routes_directly_to_common_2030_and_fresh_vintage_inputs(
     effective_config,
+    power,
 ):
+    scenario = f"{SCENARIO}_BESS_{power}GW"
     namespace = {
         "config": effective_config,
-        "scenarios": {SCENARIO: {}},
+        "scenarios": {scenario: {}},
         "copy": copy,
         "partial": partial,
         "lru_cache": lru_cache,
@@ -390,7 +393,7 @@ def test_workflow_routes_directly_to_common_2030_and_fresh_vintage_inputs(
             namespace,
         )
     wildcards = Wildcards(
-        fromdict={"run": SCENARIO, "clusters": "27", "planning_horizons": "2035"}
+        fromdict={"run": scenario, "clusters": "27", "planning_horizons": "2035"}
     )
     assert (
         namespace["solved_previous_horizon"](wildcards)
