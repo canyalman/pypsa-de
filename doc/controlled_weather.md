@@ -1,5 +1,10 @@
 # Controlled weather-year experiment (2035)
 
+This branch adds fixed BESS pathways to the parent experiment described below.
+See [Weather BESS pathways](weather_bess_pathways.md) for the active scenarios,
+new prefixes and run targets. The common-history and weather-handling logic
+below is retained.
+
 For reproducible cache handling, preflight/solve commands and Slurm status
 checks, see [Weather cluster runs](weather_cluster_runs.md).
 
