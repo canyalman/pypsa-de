@@ -72,8 +72,13 @@ def test_controlled_config_preserves_the_reference_assumptions(effective_config)
     c = effective_config
     year = pd.Timestamp(c["snapshots"]["start"]).year
     assert year in [1996, 2010, 2023]
-    assert c["run"]["name"] == [SCENARIO]
-    assert c["run"]["prefix"] == f"thesis_weather_controlled_{year}"
+    assert c["run"]["name"] == [
+        SCENARIO,
+        *[f"{SCENARIO}_BESS_{power}GW" for power in (15, 35, 55)],
+    ]
+    storage = c["electricity"]["storage_options"]
+    family = "iron_air" if "iron-air" in storage else "caes69"
+    assert c["run"]["prefix"] == f"thesis_weather_{family}_{year}"
     assert c["run"]["shared_resources"]["policy"] is False
     assert c["scenario"]["planning_horizons"] == [2025, 2030, 2035]
     assert c["clustering"]["temporal"]["resolution_sector"] == "3H"

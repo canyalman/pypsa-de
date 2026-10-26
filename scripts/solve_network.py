@@ -1268,6 +1268,95 @@ def add_battery_constraints(n, planning_horizons=None):
     n.model.add_constraints(lhs == 0, name="Link-charger_ratio")
 
 
+def add_iron_air_constraints(n):
+    """
+    Enforce the configured iron-air AC power ratio and discharge duration.
+
+    The discharger Link ``p_nom`` is measured on the internal Store side.
+    Therefore, for a discharge efficiency ``eta_d`` and rated AC power
+    ``P_AC``, ``P_AC = eta_d * P_discharger_internal``. Equal grid-facing
+    charging and discharging power is enforced by setting charger ``p_nom`` to
+    the same ``P_AC``. A duration of 100 hours at full rated AC output requires
+    ``Store-e_nom = 100 * P_discharger_internal``.
+    """
+    options = (
+        n.config.get("electricity", {})
+        .get("storage_options", {})
+        .get("iron-air")
+    )
+    if not options:
+        return
+
+    duration = float(options["duration_hours_at_rated_ac_output"])
+    configured_efficiency = float(options["discharging_efficiency"])
+
+    stores = n.stores.query("carrier == 'iron-air' and e_nom_extendable")
+    chargers = n.links.query(
+        "carrier == 'iron-air charger' and p_nom_extendable"
+    )
+    dischargers = n.links.query(
+        "carrier == 'iron-air discharger' and p_nom_extendable"
+    )
+
+    if stores.empty and chargers.empty and dischargers.empty:
+        return
+    if stores.empty or chargers.empty or dischargers.empty:
+        raise ValueError(
+            "Iron-air sizing requires an extendable Store, charger, and "
+            "discharger at every eligible bus."
+        )
+
+    def component_by_internal_bus(df, bus_column, label):
+        mapping = pd.Series(df.index.to_numpy(), index=df[bus_column].to_numpy())
+        duplicates = mapping.index[mapping.index.duplicated()].unique()
+        if not duplicates.empty:
+            raise ValueError(
+                f"Multiple extendable iron-air {label} components at buses: "
+                + ", ".join(map(str, duplicates))
+            )
+        return mapping
+
+    stores_by_bus = component_by_internal_bus(stores, "bus", "Store")
+    chargers_by_bus = component_by_internal_bus(chargers, "bus1", "charger")
+    dischargers_by_bus = component_by_internal_bus(
+        dischargers, "bus0", "discharger"
+    )
+
+    store_buses = set(stores_by_bus.index)
+    if not (
+        store_buses == set(chargers_by_bus.index)
+        and store_buses == set(dischargers_by_bus.index)
+    ):
+        raise ValueError(
+            "Iron-air Store, charger, and discharger buses do not match."
+        )
+
+    internal_buses = sorted(store_buses)
+    for position, internal_bus in enumerate(internal_buses):
+        store_name = stores_by_bus.at[internal_bus]
+        charger_name = chargers_by_bus.at[internal_bus]
+        discharger_name = dischargers_by_bus.at[internal_bus]
+        efficiency = float(n.links.at[discharger_name, "efficiency"])
+        if not np.isclose(efficiency, configured_efficiency):
+            raise ValueError(
+                f"Iron-air discharger efficiency at {internal_bus} is "
+                f"{efficiency}, expected {configured_efficiency}."
+            )
+
+        store_nominal = n.model["Store-e_nom"].loc[store_name]
+        charger_nominal = n.model["Link-p_nom"].loc[charger_name]
+        discharger_nominal = n.model["Link-p_nom"].loc[discharger_name]
+
+        n.model.add_constraints(
+            store_nominal - duration * discharger_nominal == 0,
+            name=f"Iron-air-storage_duration-{position}",
+        )
+        n.model.add_constraints(
+            charger_nominal - efficiency * discharger_nominal == 0,
+            name=f"Iron-air-charger_ratio-{position}",
+        )
+
+
 def add_lossy_bidirectional_link_constraints(n):
     if not n.links.p_nom_extendable.any() or not any(n.links.get("reversed", [])):
         return
@@ -1515,6 +1604,7 @@ def extra_functionality(
             add_TES_charger_ratio_constraints(n)
 
     add_battery_constraints(n, planning_horizons)
+    add_iron_air_constraints(n)
     add_lossy_bidirectional_link_constraints(n)
     add_pipe_retrofit_constraint(n)
     if n._multi_invest:
