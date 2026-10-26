@@ -4,11 +4,14 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: thesis_weather_controlled_2010
+  prefix: thesis_weather_caes69_2010
   name:
   # - ExPol
   # - KN2045_Mix
   - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -472,7 +475,7 @@ solving:
       strict_asset_match: true
       capacity_tolerance: 0.012
       bound_clip_tolerance: 0.05
-      capacity_manifest: resources/thesis_weather_controlled_2010/fixed_neighbor_capacities.csv
+      capacity_manifest: resources/thesis_weather_caes69_2010/fixed_neighbor_capacities.csv
       reference_networks:
         2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
         2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
@@ -693,6 +696,55 @@ electricity:
   powerplants_filter: (DateOut > 2025 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP") and (DateIn < 2026 or DateIn != DateIn)
   custom_powerplants: true
   custom_file: resources/german_chp.csv
+  storage_options:
+    aCAES_RESC_continuous:
+      enable: true
+      countries:
+      - DE
+      bus_carriers:
+      - AC
+      first_investment_year: 2035
+      carrier: aCAES RESC continuous
+      round_trip_efficiency: 0.69
+      efficiency_split: symmetric
+      charge_to_discharge_power_ratio: 1.0
+      standing_loss_per_hour: 0.0
+      minimum_soc_pu: 0.0
+      cyclic_state_of_charge: true
+      lifetime_years: 30
+      discount_rate: 0.07
+      minimum_output_duration_hours: 8
+      maximum_output_duration_hours: 48
+      costs:
+        capex_power_usd2022_per_kw: 1699.0
+        capex_output_energy_usd2022_per_kwh: 40.5
+        fom_power_usd2022_per_kw_year: 10.856666666666667
+        fom_output_energy_usd2022_per_kwh_year: 0.02
+        vom_usd2022_per_mwh_output: 1.05
+        capex_fit_sample_size: 18
+        capex_fit_r_squared: 0.9963
+        capex_fit_mean_absolute_percentage_error: 0.0469
+        capex_fit_max_absolute_percentage_error: 0.1511
+      currency_conversion:
+        usd_per_eur_2022: 1.0534
+        euro_area_hicp_change_2021: 0.026
+        euro_area_hicp_change_2022: 0.084
+        usd2022_to_eur2020: 0.853552115374527
+      geological_output_capacity_twh: 7.6
+      site_output_capacities_twh:
+        DE2 2: 1.085714285714
+        DE2 3: 1.677922077922
+        DE2 5: 2.171428571429
+        DE2 7: 2.664935064935
+      source_costs: PacifiCorp 2023 IRP RESC A-CAES project options, real USD2022
+      source_costs_url: https://www.pacificorp.com/content/dam/pcorp/documents/en/pacificorp/energy/integrated-resource-plan/2023-irp/2023_IRP_Volume_I.pdf
+      source_efficiency: PacifiCorp August 2024 public-input presentation, 500 MW / 4000 MWh A-CAES
+      source_efficiency_url: https://www.pacificorp.com/content/dam/pcorp/documents/en/pacificorp/energy/integrated-resource-plan/2025-irp/PacifiCorp_2025_IRP_PIM_August_14-15_2024.pdf
+      source_geology: BGR InSpEE and InSpEE-DS, 7.6 TWh usable electrical output
+      source_geology_url: https://www.bgr.bund.de/DE/Themen/Nutzung-tieferer-Untergrund/Downloads/InSpEE_Abschlussbericht.pdf
+      source_currency: Federal Reserve 2022 annual EUR/USD average; ECB/Eurostat euro-area HICP 2021-2022
+      source_exchange_rate_url: https://www.federalreserve.gov/releases/g5a/20230109/
+      source_hicp_url: https://www.ecb.europa.eu/press/annual-reports-financial-statements/annual/html/ecb.ar2022~8ae51d163b.en.html
   H2_plants:
     enable: EU # allowed values: false, DE, EU
     start: 2030 # should be < force

@@ -1,5 +1,9 @@
 # Controlled weather-year experiment (2035)
 
+This branch adds endogenous and fixed-BESS LDES cases to the parent experiment below.
+See [Weather LDES runs](weather_ldes.md) for its active technology, prefixes,
+unchanged assumptions and final-year targets.
+
 For reproducible cache handling, preflight/solve commands and Slurm status
 checks, see [Weather cluster runs](weather_cluster_runs.md).
 

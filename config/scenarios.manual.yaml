@@ -84,3 +84,297 @@ KN2045_Mix_FixedRenewables:
               2025: 0
               2030: 2.688
               2035: 11.477
+
+# Total German utility BESS, including inherited capacity, in GW AC output.
+# The four-hour fleet equation gives 60 / 140 / 220 GWh AC-equivalent.
+KN2045_Mix_FixedRenewables_BESS_15GW:
+  weather_year: 2010
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+              2040: 160
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+              2040: 50
+              2045: 70
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+              2040: 400
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2035: 15
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+              2040: 160
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+              2040: 50
+              2045: 70
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+              2040: 400
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2035: 15
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      capacity_limit_basis:
+        Link:
+          battery discharger:
+            DE:
+              2035: output
+  battery_storage_duration:
+    exclude:
+      DE:
+      - 2025
+KN2045_Mix_FixedRenewables_BESS_35GW:
+  weather_year: 2010
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+              2040: 160
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+              2040: 50
+              2045: 70
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+              2040: 400
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2035: 35
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+              2040: 160
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+              2040: 50
+              2045: 70
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+              2040: 400
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2035: 35
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      capacity_limit_basis:
+        Link:
+          battery discharger:
+            DE:
+              2035: output
+  battery_storage_duration:
+    exclude:
+      DE:
+      - 2025
+KN2045_Mix_FixedRenewables_BESS_55GW:
+  weather_year: 2010
+  solving:
+    constraints:
+      limits_capacity_min:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+              2040: 160
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+              2040: 50
+              2045: 70
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+              2040: 400
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2035: 55
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      limits_capacity_max:
+        Generator:
+          onwind:
+            DE:
+              2025: 68.1
+              2030: 105
+              2035: 146
+              2040: 160
+              2045: 160
+          offwind:
+            DE:
+              2025: 9.5
+              2030: 20
+              2035: 38
+              2040: 50
+              2045: 70
+          solar:
+            DE:
+              2025: 117
+              2030: 215
+              2035: 311
+              2040: 400
+              2045: 400
+        Store:
+          battery:
+            DE:
+              2025: 4.058
+          home battery:
+            DE:
+              2025: 0
+              2030: 5.43
+              2035: 24.29
+        Link:
+          battery discharger:
+            DE:
+              2025: 2.705
+              2035: 55
+          home battery discharger:
+            DE:
+              2025: 0
+              2030: 2.688
+              2035: 11.477
+      capacity_limit_basis:
+        Link:
+          battery discharger:
+            DE:
+              2035: output
+  battery_storage_duration:
+    exclude:
+      DE:
+      - 2025
