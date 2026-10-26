@@ -4,11 +4,14 @@
 
 # docs in https://pypsa-eur.readthedocs.io/en/latest/configuration.html#run
 run:
-  prefix: thesis_weather_controlled_2023
+  prefix: thesis_weather_iron_air_2023
   name:
   # - ExPol
   # - KN2045_Mix
   - KN2045_Mix_FixedRenewables
+  - KN2045_Mix_FixedRenewables_BESS_15GW
+  - KN2045_Mix_FixedRenewables_BESS_35GW
+  - KN2045_Mix_FixedRenewables_BESS_55GW
   # - KN2045_Mix_LowDecentralDiscount
   # - KN2045_Mix_HighDecentralDiscount
   # - KN2045_Mix_H2plantsEU
@@ -472,7 +475,7 @@ solving:
       strict_asset_match: true
       capacity_tolerance: 0.012
       bound_clip_tolerance: 0.05
-      capacity_manifest: resources/thesis_weather_controlled_2023/fixed_neighbor_capacities.csv
+      capacity_manifest: resources/thesis_weather_iron_air_2023/fixed_neighbor_capacities.csv
       reference_networks:
         2025: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2025.nc
         2030: cluster-results/endo_4h_3h_2025base_fixedgas_2026-09-14/KN2045_Mix_FixedRenewables/networks/base_s_27__none_2030.nc
@@ -693,6 +696,31 @@ electricity:
   powerplants_filter: (DateOut > 2025 or DateOut != DateOut) and not (Country == "DE" and Set == "CHP") and (DateIn < 2026 or DateIn != DateIn)
   custom_powerplants: true
   custom_file: resources/german_chp.csv
+  extendable_carriers:
+    Store: [battery, H2, iron-air]
+  storage_options:
+    iron-air:
+      countries:
+      - DE
+      bus_carriers:
+      - AC
+      duration_hours_at_rated_ac_output: 100.0
+      charging_efficiency: 0.71
+      discharging_efficiency: 0.6
+      combined_capex_eur_per_kw_ac: 1547.09
+      fom_percent: 1.0
+      lifetime_years: 17.5
+      discount_rate: 0.07
+      standing_loss_per_hour: 0.0
+      marginal_cost_eur_per_mwh: 0.0
+      currency_year: 2020
+      source_currency_year_assumed: 2023
+      source_capex_usd_per_kwh: 20.0
+      source_fom_usd_per_kw_year: 20.0
+      usd_per_eur_2023_ecb_average: 1.081268627451
+      eur_2023_to_eur_2020_factor: 0.8364122000983835
+      source: 'Form Energy, Navigating the Pacific Northwest''s Energy Challenges, Appendix C, Table C1; upper-end
+        cost values; 2023 currency year assumed following PyPSA technology-data PR #179; ECB 2023 annual average USD/EUR'
   H2_plants:
     enable: EU # allowed values: false, DE, EU
     start: 2030 # should be < force
