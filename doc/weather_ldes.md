@@ -73,6 +73,13 @@ as part of this weather experiment.
   discount rate 7%; all USD2022 cost coefficients, conversion factors and source
   metadata are copied from `caes-fixed-nonde-3h-2025base-rte69`.
 
+Additional domestic LDES internal buses need not exist in the Li-ion-only
+reference. Preflight accepts them only for an enabled storage technology at an
+allowed common German AC bus (and a configured CAES site), with one matching
+extendable Store, the two correctly connected extendable Links and configured
+efficiencies. Other connected assets, extra ports, missing reference buses and
+unrecognised extra buses remain errors. Fixed-fleet capacities are not relaxed.
+
 The source technology functions are ported narrowly into the controlled weather
 code. In particular, the explicit nuclear availability year, calendar alignment,
 static reference validation, heat/oil accounting and workflow/cache repairs are
@@ -134,7 +141,8 @@ successful Python finalisation and the exported network.
 Run the common suite:
 
 ```bash
-python -m pytest test/test_weather_ldes_pathways.py test/test_weather_ldes.py \
+python -m pytest test/test_weather_ldes_preflight.py \
+  test/test_weather_ldes_pathways.py test/test_weather_ldes.py \
   test/test_controlled_weather.py \
   test/test_controlled_weather_adequacy.py test/test_weather_workflow.py \
   test/test_controlled_weather_heat_profiles.py test/test_fixed_co2_price.py \
@@ -148,5 +156,7 @@ hooks, endogenous LDES sizing and efficiency, legacy/vintage behaviour, small
 LPs and the real post-solve metadata/finalizer/NetCDF/YAML publication flow.
 Pathway tests exercise the production scenario provider, verify no target leakage
 into the endogenous case, solve coupled Li-ion/LDES toy LPs and build a real
-four-scenario preflight/cache DAG. They do not replace full-size cluster preflight
-and solve validation.
+four-scenario preflight/cache DAG. LDES preflight tests also run the actual script
+after technology attachment, native vintage labelling and NetCDF export/import
+for all four cases, and reject malformed internal-storage connections. They do
+not replace full-size cluster preflight and solve validation.

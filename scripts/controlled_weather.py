@@ -178,10 +178,110 @@ def validate_input_series(n):
                 raise ValueError(f"Missing/non-finite input: {c.name}.{attribute}.")
 
 
-def freeze_domestic_renewables(n, reference, settings, tolerance):
+def validate_reference_buses(n, reference, settings, electricity=None):
+    """Allow only configured, isolated domestic LDES internals beyond the fleet."""
+    missing = reference.buses.index.difference(n.buses.index)
+    if len(missing):
+        raise ValueError(f"Missing reference buses: {missing.tolist()}.")
+    extra = n.buses.index.difference(reference.buses.index)
+    if extra.empty:
+        return
+
+    electricity = electricity or {}
+    storage = electricity.get("storage_options", {})
+    allowed = {}
+    iron_air = storage.get("iron-air", {})
+    if iron_air and "iron-air" in electricity.get("extendable_carriers", {}).get(
+        "Store", []
+    ):
+        allowed["iron-air"] = (
+            iron_air,
+            "iron-air charger",
+            "iron-air discharger",
+            float(iron_air["charging_efficiency"]),
+            float(iron_air["discharging_efficiency"]),
+            None,
+        )
+    caes = storage.get("aCAES_RESC_continuous", {})
+    if caes.get("enable", False) and settings["planning_horizon"] >= int(
+        caes["first_investment_year"]
+    ):
+        carrier = caes["carrier"]
+        allowed[carrier] = (
+            caes,
+            f"{carrier} charge",
+            f"{carrier} discharge",
+            np.sqrt(float(caes["round_trip_efficiency"])),
+            np.sqrt(float(caes["round_trip_efficiency"])),
+            set(caes["site_output_capacities_twh"]),
+        )
+
+    link_ports = [c for c in n.links if re.fullmatch(r"bus\d+", c)]
+    for bus in extra:
+
+        def reject(reason):
+            raise ValueError(f"Unexpected controlled-weather bus {bus!r}: {reason}.")
+
+        row = n.buses.loc[bus]
+        if row.carrier not in allowed:
+            reject("not an enabled domestic LDES carrier")
+        options, charge, discharge, eta_c, eta_d, sites = allowed[row.carrier]
+        site = row.location
+        if site not in reference.buses.index:
+            reject("location is not a common reference bus")
+        country = settings["domestic_country"]
+        if not (
+            row.country == country
+            and country in options.get("countries", [])
+            and n.buses.at[site, "country"] == country
+            and reference.buses.at[site, "country"] == country
+            and n.buses.at[site, "carrier"] == "AC"
+            and reference.buses.at[site, "carrier"] == "AC"
+            and "AC" in options.get("bus_carriers", [])
+        ):
+            reject("not connected to an allowed domestic AC bus")
+        if bus != f"{site} {row.carrier}" or (sites is not None and site not in sites):
+            reject("name or site does not match the storage configuration")
+
+        stores = n.stores.loc[n.stores.bus.eq(bus)]
+        links = n.links.loc[n.links[link_ports].eq(bus).any(axis=1)]
+        if len(stores) != 1 or len(links) != 2:
+            reject("requires exactly one Store and two storage Links")
+        if not (stores.carrier.eq(row.carrier).all() and stores.e_nom_extendable.all()):
+            reject("Store carrier or extendability does not match the LDES option")
+        for carrier, bus0, bus1, efficiency in (
+            (charge, site, bus, eta_c),
+            (discharge, bus, site, eta_d),
+        ):
+            selected = links.loc[links.carrier.eq(carrier)]
+            if len(selected) != 1:
+                reject(f"missing or duplicate {carrier} Link")
+            link = selected.iloc[0]
+            other_ports = [p for p in link_ports if p not in {"bus0", "bus1"}]
+            if not (
+                link.bus0 == bus0
+                and link.bus1 == bus1
+                and link.p_nom_extendable
+                and link[other_ports].fillna("").eq("").all()
+            ):
+                reject(f"invalid connection or extendability for {carrier}")
+            values = n.get_switchable_as_dense(
+                "Link", "efficiency", inds=selected.index
+            )
+            if not np.allclose(values, efficiency, rtol=1e-9, atol=1e-12):
+                reject(f"{carrier} efficiency does not match the configuration")
+        for component in n.components.values():
+            if component.name in {"Bus", "Store", "Link"} or component.static.empty:
+                continue
+            ports = [c for c in component.static if re.fullmatch(r"bus\d*", c)]
+            if component.static[ports].eq(bus).any().any():
+                reject(f"unexpected {component.name} connection to an internal bus")
+    logger.info("Validated %s additional domestic LDES internal buses.", len(extra))
+
+
+def freeze_domestic_renewables(n, reference, settings, tolerance, electricity=None):
     """Fix node/technology/vintage capacity, not dispatch or a national aggregate."""
-    if set(n.buses.index) != set(reference.buses.index):
-        raise ValueError("Reference and weather networks have different bus sets.")
+    validate_reference_buses(n, reference, settings, electricity)
     country = settings["domestic_country"]
     rows = []
     for component, carriers in (
@@ -326,7 +426,11 @@ def prepare_controlled_weather(n, snakemake):
         foreign_summary["removed_annualized_capex_eur"],
     )
     ledger = freeze_domestic_renewables(
-        n, reference, settings, fixed.get("bound_clip_tolerance", 0.05)
+        n,
+        reference,
+        settings,
+        fixed.get("bound_clip_tolerance", 0.05),
+        electricity=snakemake.config.get("electricity", {}),
     )
     path = (
         Path(snakemake.output.network).parent.parent
