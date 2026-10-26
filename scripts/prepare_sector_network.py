@@ -6684,6 +6684,7 @@ if __name__ == "__main__":
         costs=costs,
         buses_i=pop_layout.index,
         extendable_carriers=extendable_stores,
+        carrier_options=snakemake.params.electricity.get("storage_options", {}),
     )
 
     if options["transport"]:
