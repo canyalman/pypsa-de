@@ -51,7 +51,7 @@ def test_unknown_outputs_do_not_mask_invalid_standard_input():
         validate_input_series(previous)
 
 
-def fixture_workflow(tmp_path, cache_files=(), dispatch=False):
+def fixture_workflow(tmp_path, cache_files=(), dispatch=False, run_names=None):
     """Include the production weather rule file, not an AST-only approximation."""
     if dispatch and "rule prepare_dispatch_weather_network:" not in (
         ROOT / "rules/pypsa-de/controlled_weather.smk"
@@ -82,7 +82,7 @@ def fixture_workflow(tmp_path, cache_files=(), dispatch=False):
             "reference_network": "reference_2035.nc",
             "weather_resources_directory": str(cache),
         },
-        "run": {"name": ["case"]},
+        "run": {"name": run_names if run_names is not None else ["case"]},
         "scenario": {"clusters": ["27"], "opts": [""], "sector_opts": ["none"]},
         "solving": {},
     }
